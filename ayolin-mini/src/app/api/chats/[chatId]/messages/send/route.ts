@@ -5,9 +5,9 @@ import { generateText } from "ai";
 
 const SYSTEM_PROMPT = 'Eres ATOLIN, un sistente personal claro y util. Responde en español de forma concisa y práctica.'
 
-export async function POST(req: NextRequest, { params }: { params: { chatId: string } }){
+export async function POST(req: NextRequest, { params }: { params: Promise<{ chatId: string }> }){
     try{
-        const { chatId } = params
+        const { chatId } = await params
         const { text } = await req.json() as { text: string }
 
         if(!text || !text.trim() ){

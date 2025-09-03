@@ -2,8 +2,8 @@ import { NextResponse, NextRequest } from "next/server";
 import { db } from "@/lib/db";
 
 // Ruta para poder obtener mensajes de un chat
-export async function GET(_req: NextRequest, { params }: { params: {chatId: string } }){
-    const { chatId } = params
+export async function GET(_req: NextRequest, { params }: { params: Promise<{chatId: string }> }){
+    const { chatId } = await params
     const chat = await db.chat.findUnique({ where: { id:chatId } } )
     if(!chat) return NextResponse.json({error: 'Chat not found' }, { status: 404})
     
