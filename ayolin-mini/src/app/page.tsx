@@ -172,7 +172,7 @@ export default function ChatPage(){
                   </div>
                 ))}
                 <div ref={endRef} />
-                {loading && <div className="text-neutral-400 text-sm">Escribiendo</div>}
+                {loading && <div className="text-neutral-400 text-sm">Ayolin escribiendo...</div>}
               </div>
             </ScrollArea>
 
@@ -180,7 +180,7 @@ export default function ChatPage(){
               <Input
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder="Escribe papi"
+                placeholder="Escribe papi..."
                 className="bg-neutral-800 border-neutral-700 text-white"
               />
               <Button type="submit" disabled={loading || !activaChatId && !input.trim()} className="bg-white text-black border-black hover:bg-white/90">
