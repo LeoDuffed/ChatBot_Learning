@@ -99,7 +99,7 @@ export default function ChatPage(){
       createdAt: new Date().toISOString(),
     }])
 
-    // Llamamos a la API (guardamos user msg, llamamos a OpenAI y guardamos la rep)
+    // Llamamos a la API (guardamos user msg, llamamos a OpenAI y guardamos la resp
     const r = await fetch(`/api/chats/${chatId}/messages/send`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
