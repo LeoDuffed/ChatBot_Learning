@@ -183,7 +183,7 @@ export default function ChatPage(){
                 placeholder="Escribe papi"
                 className="bg-neutral-800 border-neutral-700 text-white"
               />
-              <Button type="submit" disabled={loading || !activaChatId && !input.trim()}>
+              <Button type="submit" disabled={loading || !activaChatId && !input.trim()} className="bg-white text-black border-black hover:bg-white/90">
                 Enviar
               </Button>
             </form>
