@@ -166,7 +166,7 @@ export default function ChatPage(){
                     className={`whitespace-pre-wrap leading-relaxed text-sm ${m.role === 'user' ? 'text-blue-300' : 'text-neutral-100' }`}
                   >
                     <span className="mr-2 text-xs opacity-60">
-                      {m.role === 'user' ? 'Tu' : 'Ayolin'}
+                      {m.role === 'user' ? 'Tu: ' : 'Ayolin: '}
                     </span>
                     {m.content}
                   </div>
