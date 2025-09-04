@@ -1,9 +1,6 @@
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
   output   = "../src/generated/prisma"
@@ -13,6 +10,12 @@ datasource db {
   provider = "mongodb"
   url      = env("DATABASE_URL")
 }
+
+/**
+ * =========================
+ * EXISTENTE (no tocar)
+ * =========================
+ */
 
 enum MessageRole {
   user
@@ -35,4 +38,131 @@ model Message {
   content   String
   createdAt DateTime    @default(now())
   updatedAt DateTime    @updatedAt
+}
+
+/**
+ * =========================
+ * NUEVO: Mini-Ayolin Ventas
+ * =========================
+ */
+
+/**
+ * Estado de la venta:
+ * - pending_payment: apartada, esperando confirmación de pago del jefe
+ * - paid: pagada/confirmada
+ * - cancelled: cancelada (debe reponer stock)
+ */
+enum SaleStatus {
+  pending_payment
+  paid
+  cancelled
+}
+
+/**
+ * Un bot por usuario (o más, si luego escalas).
+ * Aquí guardamos la contraseña (hasheada) del “jefe”.
+ */
+model Chatbot {
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  ownerUserId   String // id del usuario dueño (string desde tu auth actual)
+  name          String
+  salesEnabled  Boolean  @default(true)
+  salesPassHash String? // hash scrypt de la contraseña del “jefe”
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relaciones
+  products        Product[]
+  sales           Sale[]
+  inventoryLedger InventoryLedger[]
+  catalogs        CatalogFile[]
+
+  @@index([ownerUserId])
+}
+
+/**
+ * Archivos de catálogo subidos (PDF/imagen).
+ * text: texto extraído (PDF u OCR); opcional.
+ */
+model CatalogFile {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  chatbotId String   @db.ObjectId
+  bot       Chatbot  @relation(fields: [chatbotId], references: [id])
+  filename  String
+  mimeType  String
+  text      String?
+  createdAt DateTime @default(now())
+
+  @@index([chatbotId, createdAt])
+}
+
+/**
+ * Productos del bot.
+ * Para evitar problemas con decimales en Mongo, usamos priceCents (ej. $199.90 -> 19990).
+ * Regla: SKU único por bot.
+ */
+model Product {
+  id        String  @id @default(auto()) @map("_id") @db.ObjectId
+  chatbotId String  @db.ObjectId
+  bot       Chatbot @relation(fields: [chatbotId], references: [id])
+
+  sku         String
+  name        String
+  description String?
+  priceCents  Int // precio en centavos
+  stock       Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sales           Sale[]            @relation("ProductSales")
+  inventoryLedger InventoryLedger[] @relation("ProductInventoryLedger")
+
+  @@unique([chatbotId, sku])
+  @@index([chatbotId, name])
+}
+
+/**
+ * Venta/pedido. Se crea al confirmar el cliente la compra.
+ * Queda en pending_payment hasta que el jefe confirme pago.
+ */
+model Sale {
+  id        String  @id @default(auto()) @map("_id") @db.ObjectId
+  chatbotId String  @db.ObjectId
+  bot       Chatbot @relation(fields: [chatbotId], references: [id])
+
+  productId String  @db.ObjectId
+  product   Product @relation(name: "ProductSales", fields: [productId], references: [id])
+
+  qty           Int
+  status        SaleStatus @default(pending_payment)
+  paymentMethod String? // "cash" | "card" | "transfer" | etc.
+  customerRef   String? // id/teléfono/chatId del cliente si lo deseas
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([chatbotId, status, createdAt])
+}
+
+/**
+ * Libro mayor de inventario para auditoría (entradas/salidas).
+ * delta: +entrada / -salida
+ * reason: "restock" | "sale" | "adjust" | etc.
+ * ref: id de venta u otra referencia
+ */
+model InventoryLedger {
+  id        String  @id @default(auto()) @map("_id") @db.ObjectId
+  chatbotId String  @db.ObjectId
+  bot       Chatbot @relation(fields: [chatbotId], references: [id])
+
+  productId String  @db.ObjectId
+  product   Product @relation(name: "ProductInventoryLedger", fields: [productId], references: [id])
+
+  delta     Int
+  reason    String
+  ref       String?
+  createdAt DateTime @default(now())
+
+  @@index([chatbotId, productId, createdAt])
 }
