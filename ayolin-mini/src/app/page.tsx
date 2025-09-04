@@ -74,6 +74,25 @@ export default function ChatPage(){
     setMessages([])
   }
 
+  async function deleteChat(chatId: string){
+    const r = await fetch(`/api/chats/${chatId}`, { method: 'DELETE' })
+    if(!r.ok){
+      console.error('DELETE /api/chats/[id] falló')
+      return
+    }
+
+    // Actualización optimista + reajuste del chat activo si aplica
+    setChats(prev => {
+      const remaining = prev.filter(c => c.id !== chatId)
+      if(activaChatId === chatId){
+        const next = remaining[0]?.id ?? null
+        setActiveChatId(next)
+        setMessages([])
+      }
+      return remaining
+    })
+  }
+
   async function send(e: React.FormEvent){
     e.preventDefault()
     if(!input.trim()) return 
@@ -139,12 +158,23 @@ export default function ChatPage(){
         <ScrollArea className="h-[calc(100vh-6rem)] pr-2">
           <div className="space-y-2">
             {chats.map((c) => (
-              <button
-                key={c.id}
-                onClick={() => setActiveChatId(c.id)}
-                className={`w-full text-left px-3 py-2 rounded-lg border ${activaChatId === c.id ? 'border-blue-500 bg-blue-500/10': 'border-neutral-800 hover:bg-neutral-900'}`}>
-                  <div className="truncate text-sm">{c.title || 'Sin titulo'}</div>
-                </button>
+              <div key={c.id} className="flex items-center gap-2">
+                <button
+                  onClick={() => setActiveChatId(c.id)}
+                  className={`w-full text-left px-3 py-2 rounded-lg border ${activaChatId === c.id ? 'border-blue-500 bg-blue-500/10': 'border-neutral-800 hover:bg-neutral-900'}`}>
+                    <div className="truncate text-sm">{c.title || 'Sin titulo'}</div>
+                  </button>
+
+                  <Button
+                    size="icon"
+                    variant="destructive"
+                    className="border-neutral-800 bg-red-400 text-black hover:bg-red-300"
+                    onClick={() => deleteChat(c.id)}
+                    title="Eliminar chat"
+                  >
+                    X
+                  </Button>
+              </div>
             ))}
           </div>
         </ScrollArea>
@@ -183,7 +213,7 @@ export default function ChatPage(){
                 placeholder="Escribe papi..."
                 className="bg-neutral-800 border-neutral-700 text-white"
               />
-              <Button type="submit" disabled={loading || !activaChatId && !input.trim()} className="bg-white text-black border-black hover:bg-white/90">
+              <Button type="submit" disabled={loading || !input.trim()} className="bg-white text-black border-black hover:bg-white/90">
                 Enviar
               </Button>
             </form>
