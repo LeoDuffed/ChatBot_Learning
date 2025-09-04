@@ -1,36 +1,99 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Mini-Ayolin: Flujo de Ventas
 
-## Getting Started
+## Tabla de Contenidos
+- [1. Tablero de configuración del chatbot vendedor](#1-tablero-de-configuración-del-chatbot-vendedor)
+- [2. Flujo de una venta](#2-flujo-de-una-venta)
+- [3. Endpoints del flujo de venta](#3-endpoints-del-flujo-de-venta)
 
-First, run the development server:
+---
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## 1. Tablero de configuración del chatbot vendedor
+
+Cuando un usuario crea su chatbot y lo pone en **modo ventas**, aparece un tablero (un panel dentro de AYOLIN) con secciones como:
+
+- **Catálogo**  
+  Subir PDF/imagen (solo para extraer productos).
+
+- **Inventario**  
+  Ingresar a mano cuántos productos hay de cada uno.
+
+- **Configuración de seguridad**  
+  Definir la contraseña que luego se usará en WhatsApp/Telegram.
+
+👉 **Nota:** El PDF no es para el stock, sino únicamente para darle contexto a Ayolin de qué vende el usuario.  
+El stock se ingresa manualmente, lo cual es más confiable (el parsing automático de cantidades puede ser impreciso).
+
+---
+
+## 2. Flujo de una venta
+
+1. **Cliente pide producto**  
+   - Ayolin busca en inventario.  
+   - Si hay stock, responde:  
+     > “Sí tengo 2 camisetas blancas, ¿quieres comprarlas?”
+
+2. **Cliente confirma compra**  
+   - Ayolin descuenta el stock.  
+   - Crea un pedido en estado `pending_payment`.  
+   - Pregunta:  
+     > “Perfecto, ¿cómo quieres pagar?”  
+   - Guarda la elección del método de pago en el pedido.
+
+3. **Registro del pedido (ejemplo JSON)**
+
+   ```json
+   {
+     "id": "sale_001",
+     "chatbotId": "bot_abc",
+     "productId": "prod_123",
+     "qty": 2,
+     "status": "pending_payment",
+     "paymentMethod": "cash"
+   }
+   ```
+
+   - El pedido queda en la base de datos (`DB`).  
+   - El stock ya está reducido (para no ofrecer algo ya vendido).
+
+4. **El jefe revisa pedidos**  
+   - Tiene un tablero donde ve todas las ventas:  
+     - Pendientes de pago  
+     - Pagadas  
+     - Canceladas  
+
+   - Cuando confirma que recibió el pago, cambia el `status` a **paid**.
+
+5. **Clientes futuros**  
+   - Como el stock se redujo en el paso 2, ningún cliente podrá comprar un producto que ya está **apartado**.  
+   - Si el jefe marca el pedido como **cancelado**, el stock vuelve a subir.
+
+---
+
+## 3. Endpoints del flujo de venta
+
+Con tu `schema.prisma` ya funcionando, armamos los **endpoints** del flujo de venta para **mini-Ayolin**, usando:
+
+```ts
+import { db } from "@/lib/db"
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+y el patrón de **App Router con runtime Node**.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Resumen del flujo:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- **POST `/api/sales/intent`**  
+  Valida SKU + stock y regresa un prompt de confirmación.
 
-## Learn More
+- **POST `/api/sales/confirm`**  
+  Descuenta stock + crea `Sale` con `pending_payment`.
 
-To learn more about Next.js, take a look at the following resources:
+- **GET `/api/sales/admin`**  
+  Lista ventas para el dueño.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- **POST `/api/sales/:id/mark-paid`**  
+  El jefe confirma pago.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- **POST `/api/sales/:id/cancel`**  
+  Cancela venta y repone stock.
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+---
