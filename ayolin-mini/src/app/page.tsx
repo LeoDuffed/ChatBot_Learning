@@ -184,7 +184,7 @@ export default function ChatPage(){
       <section className="col-span-9 p-6">
         <Card className="h-full bg-neutral-900 border-neutral-800 flex flex-col">
           <CardContent className="p-0 flex flex-col h-full">
-            <div className="px-4 py-3 border-b border-neutral-800 text-sm opacity-80 text-white font-bold">
+            <div className="px-4 py-3 border-b border-neutral-800 text-2xl opacity-80 text-white font-bold">
               {activeChatTitle}
             </div>
             
