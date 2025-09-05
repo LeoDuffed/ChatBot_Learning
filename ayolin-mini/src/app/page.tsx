@@ -150,9 +150,8 @@ export default function ChatPage(){
     <main className="grid min-h-screen grid-cols-12 bg-neutral-950 text-white">
       {/* Sidebar */}
       <aside className="col-span-3 border-r border-neutral-800 p-4 space-y-4">
-        <div className="flex flex-col items-start gap-2 md:flex-row md:items-center md:justify-between md:gap-0">
-          <h2 className="text-sm font-semibold opacity-80">Chatbots</h2>
-          <Button size="sm" variant="secondary" onClick={newChat}>+ Nuevo</Button>
+        <div className="flex flex-col items-start gap-2 md:flex-row md:items-center md:justify-between md:gap-0 pb-10">
+          <Button size="sm" variant="secondary" onClick={newChat} className="w-full">+ Nuevo</Button>
         </div>
 
         <ScrollArea className="h-[calc(100vh-6rem)] pr-2">

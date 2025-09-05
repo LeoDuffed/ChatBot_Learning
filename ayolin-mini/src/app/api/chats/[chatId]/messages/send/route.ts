@@ -4,7 +4,7 @@ import { openai } from "@ai-sdk/openai";
 import { generateText } from "ai";
 
 // Rol que le vamos a dar a nuestra ia
-const SYSTEM_PROMPT = 'Eres ATOLIN, un sistente personal claro y util. Responde en español de forma concisa y práctica.'
+const SYSTEM_PROMPT = 'Eres AYOLIN, un sistente personal claro y util. Responde en español de forma concisa y práctica.'
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ chatId: string }> }){ // Endpoint dinamico
     try{
@@ -39,7 +39,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cha
 
         //Llamamos a OpenAI
         const result = await generateText({
-            model: openai('gpt-4.1-mini'),
+            model: openai('gpt-4.1-nano'),
             system: SYSTEM_PROMPT,
             messages, // Historial del chat
             temperature: 0.7, // Equilibrio de creatividad y consistencia

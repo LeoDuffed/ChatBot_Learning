@@ -10,7 +10,7 @@ export async function POST(req: NextRequest){
         }
 
         const result = await generateText({
-            model: openai('gpt-4o-mini'),
+            model: openai('gpt-4.1-nano'),
             system: "Eres un asistente de prueba para AYOLIN.",
             messages: [{ role: 'user', content: prompt }],
             temperature: 0.7,
