@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 'use client'
 
 import { 
@@ -5,6 +7,8 @@ import {
   useMemo,
   useRef,
   useState, 
+  useCallback,
+  useActionState,
 } from "react"
 import { 
   Card,
@@ -13,6 +17,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Target } from "lucide-react"
 
 type Chat = { id: string; title?: string | null }
 type Msg = { id: string; role: 'user' | 'assistant'; content: string; createdAt: string }
@@ -24,6 +29,10 @@ export default function ChatPage(){
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const endRef = useRef<HTMLDivElement>(null)
+  const [sales, setSales] = useState<any[]>([])
+  const [admiPw, setAdminPw] = useState("")
+  const [prodForm, setProdForm] = useState({ sku:"", name:"", priceCents:"", stock:""})
+  const [intentForm, setIntentForm] = useState({ sku:"", qty: "1" })
 
   // Auto scroll 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth'}) }, [messages])
@@ -146,12 +155,172 @@ export default function ChatPage(){
     [chats, activaChatId]
   )
 
+  const loadPendingSales = useCallback(async () => {
+    const r = await fetch("/api/sales/admin?status=pending_payment")
+    if(!r.ok) return
+    const data = await r.json()
+    setSales(data.items ?? [])
+  }, [])
+
   return (
     <main className="grid min-h-screen grid-cols-12 bg-neutral-950 text-white">
       {/* Sidebar */}
       <aside className="col-span-3 border-r border-neutral-800 p-4 space-y-4">
         <div className="flex flex-col items-start gap-2 md:flex-row md:items-center md:justify-between md:gap-0 pb-10">
           <Button size="sm" variant="secondary" onClick={newChat} className="w-full">+ Nuevo</Button>
+        </div>
+
+        <div className="space-y-3 pb-6 border-b border-neutral-800">
+          <div className="text-sm font-semibold opacity-80">Ventas Panel</div>
+
+          <div className="space-y-2">
+            <div className="text-xs opacity-70">Contraseña del jefe</div>
+            <Input 
+              type="password" 
+              value={admiPw} 
+              onChange={(e) => setAdminPw(e.target.value)} 
+              placeholder="Minimo 4 caracteres" 
+              className="bg-neutral-800 border-neutral-700 text-white"
+            />
+            <Button
+              size="sm"
+              onClick={async() => {
+                const r = await fetch("/api/my-bot/settings/sales-password",{
+                  method: "PUT",
+                  headers: {"Content-Type":"application/json"},
+                  body: JSON.stringify({password: admiPw})
+                })
+                alert(r.ok ? "contraseña gurdada" : "Error al guardar la contra")
+              }}
+              className="bg-white text-black hover:bg-white/90"
+            >
+              Guardar Contraseña
+            </Button>
+          </div>
+
+          <div className="space-y-2 pt-2">
+            <div className="text-xs opacity-70">Nuevo producto</div>
+            <Input placeholder="SKU" value={prodForm.sku} onChange={(e) => setProdForm(p => ({ ...p, sku:e.target.value}))} className="bg-neutral-800 border-r-neutral-700 text-white" />
+            <Input placeholder="Nombre" value={prodForm.name} onChange={(e) => setProdForm(p => ({ ...p, name:e.target.value}))} className="bg-neutral-800 border-r-neutral-700 text-white" />
+            <Input placeholder="Precio (centavos)" value={prodForm.priceCents} onChange={(e) => setProdForm(p => ({ ...p, priceCents:e.target.value}))} className="bg-neutral-800 border-r-neutral-700 text-white" />
+            <Input placeholder="Stok" value={prodForm.stock} onChange={(e) => setProdForm(p => ({ ...p, stock:e.target.value}))} className="bg-neutral-800 border-r-neutral-700 text-white" />
+            <Button 
+              size="sm"
+              onClick={async() => {
+                const r = await fetch("/api/products", {
+                  method: "POST",
+                  headers: {"Content-Type":"application/json"},
+                  body: JSON.stringify({
+                    sku: prodForm.sku,
+                    name: prodForm.name,
+                    priceCents: Number(prodForm.priceCents||0),
+                    stock: Number(prodForm.stock||0),
+                  }),
+                })
+                alert(r.ok ? "Producto guardado" : "Error guardando producto")
+                if(r.ok) setProdForm({ sku: "", name:"", priceCents:"", stock:""})
+              }}
+              className="bg-blue-500 text-black hover:bg-blue-400"
+            >
+              Guardar Producto
+            </Button>
+          </div>
+
+          <div className="space-y-2 pt-2">
+              <div className="text-sm opacity-70">Intentar venta</div>
+              <Input placeholder="SKU" value={intentForm.sku} onChange={(e)=>setIntentForm(p=>({...p, sku:e.target.value}))} className="bg-neutral-800 border-r-neutral-700 text-white"/>
+              <Input placeholder="Cantidad" value={intentForm.qty} onChange={(e)=>setIntentForm(p=>({...p, qty:e.target.value}))} className="bg-neutral-800 border-r-neutral-700 text-white"/>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  onClick={async() => {
+                    const r = await fetch("/api/sales/intent", {
+                      method: "POST",
+                      headers: {"Content-Type":"application/json"},
+                      body: JSON.stringify({sku: intentForm.sku, qty: Number(intentForm.qty||1)}),
+                    })
+                    const data = await r.json()
+                    alert(data.prompt ?? (data.error || "Respuesta sin prompt"))
+                  }}
+                  className="bg-emerald-500 text-black hover:bg-emerald-400"
+                >
+                  Probar intento
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={async() => {
+                    const r = await fetch("/api/sales/confirm",{
+                      method: "POST",
+                      headers: {"Content-Type":"application/json"},
+                      body: JSON.stringify({
+                        sku: intentForm.sku,
+                        qty: Number(intentForm.qty||1),
+                        paymentMethod: "cash",
+                      }),
+                    })
+                    const data = await r.json()
+                    alert(data.prompt ?? (data.error || "Respuesta sin prompt"))
+                    await loadPendingSales()
+                  }}
+                  className="bg-amber-600 text-black hover:bg-amber-500"
+                >
+                  Confirmar
+                </Button>
+              </div>
+          </div>
+
+          <div className="space-y-2">
+            <div className=" flex items-center justify-between">
+              <div className="text-xs opacity-70">Pendientes por pago</div>
+              <Button size="sm" variant="secondary" onClick={loadPendingSales}>Refrescar</Button>
+            </div>
+
+            <div className="space-y-2 max-h-64 overflow-auto pr-1">
+              {sales.length === 0 && <div className="text-xs text-white/60">Sin Pendientes</div>}
+              {sales.map((s) => (
+                <div key={s.id} className="border border-neutral-800 rounded p-2 text-sm space-y-1">
+                  <div className="flex justify-between">
+                    <div className="font-medium">{s.product?.name ?? s.productId}</div>
+                    <div className="opacity-60">{s.status}</div>
+                  </div>
+                  <div> Cant: {s.qty} </div>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      className="bg-emerald-600 text-black hover:bg-emerald-500"
+                      onClick={async() => {
+                        const r = await fetch(`api/sales/${s.id}/mark-paid`, {
+                          method: "POST",
+                          headers: {"Content-Type":"application/json"},
+                          body: JSON.stringify({ password: admiPw }),
+                        })
+                        if(!r.ok) { alert("contraseña invalida o error "); return }
+                        await loadPendingSales()
+                      }}
+                      >
+                         ✔
+                      </Button>
+                      <Button 
+                        size="sm"
+                        variant="destructive"
+                        onClick={async() => {
+                          const r = await fetch(`/api/sales/${s.id}/cancel`, {
+                            method: "POST",
+                            headers: {"Content-Type":"application/json"},
+                            body: JSON.stringify({ password: admiPw}),
+                          })
+                          if(!r.ok){alert("Contraseña invalida o error"); return}
+                          await loadPendingSales()
+                        }}
+                      >
+                        x
+                      </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
         </div>
 
         <ScrollArea className="h-[calc(100vh-6rem)] pr-2">
