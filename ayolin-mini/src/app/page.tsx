@@ -8,16 +8,10 @@ import {
   useRef,
   useState, 
   useCallback,
-  useActionState,
 } from "react"
-import { 
-  Card,
-  CardContent,
- } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Target } from "lucide-react"
 
 type Chat = { id: string; title?: string | null }
 type Msg = { id: string; role: 'user' | 'assistant'; content: string; createdAt: string }
@@ -54,7 +48,7 @@ export default function ChatPage(){
   // Cargar chats al abrir
   useEffect(() => {loadChats() }, [])
 
-  //Si no hay chat activo seleccionamos el primero
+  // Si no hay chat activo seleccionamos el primero
   useEffect(() => {
     if(!activaChatId && chats.length > 0){
       setActiveChatId(chats[0].id)
@@ -127,7 +121,7 @@ export default function ChatPage(){
       createdAt: new Date().toISOString(),
     }])
 
-    // Llamamos a la API (guardamos user msg, llamamos a OpenAI y guardamos la resp
+    // Llamada API
     const r = await fetch(`/api/chats/${chatId}/messages/send`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -145,7 +139,7 @@ export default function ChatPage(){
       return
     }
 
-    // Recargar mensajes de la DB para reemplazar la optimizacion
+    // Recargar mensajes de la DB
     await loadMessages(chatId!)
     await loadChats()
   }
@@ -163,208 +157,226 @@ export default function ChatPage(){
   }, [])
 
   return (
-    <main className="grid min-h-screen grid-cols-12 bg-neutral-950 text-white">
-      {/* Sidebar */}
-      <aside className="col-span-3 border-r border-neutral-800 p-4 space-y-4">
-        <div className="flex flex-col items-start gap-2 md:flex-row md:items-center md:justify-between md:gap-0 pb-10">
-          <Button size="sm" variant="secondary" onClick={newChat} className="w-full">+ Nuevo</Button>
-        </div>
-
-        <div className="space-y-3 pb-6 border-b border-neutral-800">
-          <div className="text-sm font-semibold opacity-80">Ventas Panel</div>
-
-          <div className="space-y-2">
-            <div className="text-xs opacity-70">Contraseña del jefe</div>
-            <Input 
-              type="password" 
-              value={admiPw} 
-              onChange={(e) => setAdminPw(e.target.value)} 
-              placeholder="Minimo 4 caracteres" 
-              className="bg-neutral-800 border-neutral-700 text-white"
-            />
-            <Button
-              size="sm"
-              onClick={async() => {
-                const r = await fetch("/api/my-bot/settings/sales-password",{
-                  method: "PUT",
-                  headers: {"Content-Type":"application/json"},
-                  body: JSON.stringify({password: admiPw})
-                })
-                alert(r.ok ? "contraseña gurdada" : "Error al guardar la contra")
-              }}
-              className="bg-white text-black hover:bg-white/90"
-            >
-              Guardar Contraseña
-            </Button>
+    <div className="h-full w-full">
+      <div className="grid h-[100dvh] grid-cols-12">
+        {/* Sidebar (scrollable) */}
+        <aside className="col-span-3 h-[100dvh] border-r border-neutral-800 bg-neutral-950/60 backdrop-blur flex flex-col">
+          {/* Header del aside (fijo) */}
+          <div className="p-4 border-b border-neutral-800">
+            <Button size="sm" variant="secondary" onClick={newChat} className="w-full">+ Nuevo</Button>
           </div>
 
-          <div className="space-y-2 pt-2">
-            <div className="text-xs opacity-70">Nuevo producto</div>
-            <Input placeholder="SKU" value={prodForm.sku} onChange={(e) => setProdForm(p => ({ ...p, sku:e.target.value}))} className="bg-neutral-800 border-r-neutral-700 text-white" />
-            <Input placeholder="Nombre" value={prodForm.name} onChange={(e) => setProdForm(p => ({ ...p, name:e.target.value}))} className="bg-neutral-800 border-r-neutral-700 text-white" />
-            <Input placeholder="Precio (centavos)" value={prodForm.priceCents} onChange={(e) => setProdForm(p => ({ ...p, priceCents:e.target.value}))} className="bg-neutral-800 border-r-neutral-700 text-white" />
-            <Input placeholder="Stok" value={prodForm.stock} onChange={(e) => setProdForm(p => ({ ...p, stock:e.target.value}))} className="bg-neutral-800 border-r-neutral-700 text-white" />
-            <Button 
-              size="sm"
-              onClick={async() => {
-                const r = await fetch("/api/products", {
-                  method: "POST",
-                  headers: {"Content-Type":"application/json"},
-                  body: JSON.stringify({
-                    sku: prodForm.sku,
-                    name: prodForm.name,
-                    priceCents: Number(prodForm.priceCents||0),
-                    stock: Number(prodForm.stock||0),
-                  }),
-                })
-                alert(r.ok ? "Producto guardado" : "Error guardando producto")
-                if(r.ok) setProdForm({ sku: "", name:"", priceCents:"", stock:""})
-              }}
-              className="bg-blue-500 text-black hover:bg-blue-400"
-            >
-              Guardar Producto
-            </Button>
-          </div>
+          {/* Contenido del aside con scroll propio */}
+          <div className="flex-1 overflow-y-auto">
+            <div className="p-4 space-y-6">
+              {/* Ventas Panel */}
+              <section className="space-y-3">
+                <h3 className="text-sm font-semibold text-white/80">Ventas Panel</h3>
 
-          <div className="space-y-2 pt-2">
-              <div className="text-sm opacity-70">Intentar venta</div>
-              <Input placeholder="SKU" value={intentForm.sku} onChange={(e)=>setIntentForm(p=>({...p, sku:e.target.value}))} className="bg-neutral-800 border-r-neutral-700 text-white"/>
-              <Input placeholder="Cantidad" value={intentForm.qty} onChange={(e)=>setIntentForm(p=>({...p, qty:e.target.value}))} className="bg-neutral-800 border-r-neutral-700 text-white"/>
-              <div className="flex gap-2">
-                <Button
-                  size="sm"
-                  onClick={async() => {
-                    const r = await fetch("/api/sales/intent", {
-                      method: "POST",
-                      headers: {"Content-Type":"application/json"},
-                      body: JSON.stringify({sku: intentForm.sku, qty: Number(intentForm.qty||1)}),
-                    })
-                    const data = await r.json()
-                    alert(data.prompt ?? (data.error || "Respuesta sin prompt"))
-                  }}
-                  className="bg-emerald-500 text-black hover:bg-emerald-400"
-                >
-                  Probar intento
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={async() => {
-                    const r = await fetch("/api/sales/confirm",{
-                      method: "POST",
-                      headers: {"Content-Type":"application/json"},
-                      body: JSON.stringify({
-                        sku: intentForm.sku,
-                        qty: Number(intentForm.qty||1),
-                        paymentMethod: "cash",
-                      }),
-                    })
-                    const data = await r.json()
-                    alert(data.prompt ?? (data.error || "Respuesta sin prompt"))
-                    await loadPendingSales()
-                  }}
-                  className="bg-amber-600 text-black hover:bg-amber-500"
-                >
-                  Confirmar
-                </Button>
-              </div>
-          </div>
+                <div className="space-y-2">
+                  <div className="text-xs opacity-70">Contraseña del jefe</div>
+                  <Input 
+                    type="password" 
+                    value={admiPw} 
+                    onChange={(e) => setAdminPw(e.target.value)} 
+                    placeholder="Mínimo 4 caracteres" 
+                    className="bg-neutral-800 border-neutral-700 text-white"
+                  />
+                  <Button
+                    size="sm"
+                    onClick={async() => {
+                      const r = await fetch("/api/my-bot/settings/sales-password",{
+                        method: "PUT",
+                        headers: {"Content-Type":"application/json"},
+                        body: JSON.stringify({password: admiPw})
+                      })
+                      alert(r.ok ? "Contraseña guardada" : "Error al guardar la contraseña")
+                    }}
+                    className="bg-white text-black hover:bg-white/90"
+                  >
+                    Guardar Contraseña
+                  </Button>
+                </div>
 
-          <div className="space-y-2">
-            <div className=" flex items-center justify-between">
-              <div className="text-xs opacity-70">Pendientes por pago</div>
-              <Button size="sm" variant="secondary" onClick={loadPendingSales}>Refrescar</Button>
-            </div>
+                <div className="space-y-2 pt-1">
+                  <div className="text-xs opacity-70">Nuevo producto</div>
+                  <Input placeholder="SKU" value={prodForm.sku} onChange={(e) => setProdForm(p => ({ ...p, sku:e.target.value}))} className="bg-neutral-800 border-neutral-700 text-white" />
+                  <Input placeholder="Nombre" value={prodForm.name} onChange={(e) => setProdForm(p => ({ ...p, name:e.target.value}))} className="bg-neutral-800 border-neutral-700 text-white" />
+                  <Input placeholder="Precio (centavos)" value={prodForm.priceCents} onChange={(e) => setProdForm(p => ({ ...p, priceCents:e.target.value}))} className="bg-neutral-800 border-neutral-700 text-white" />
+                  <Input placeholder="Stock" value={prodForm.stock} onChange={(e) => setProdForm(p => ({ ...p, stock:e.target.value}))} className="bg-neutral-800 border-neutral-700 text-white" />
+                  <Button 
+                    size="sm"
+                    onClick={async() => {
+                      const r = await fetch("/api/products", {
+                        method: "POST",
+                        headers: {"Content-Type":"application/json"},
+                        body: JSON.stringify({
+                          sku: prodForm.sku,
+                          name: prodForm.name,
+                          priceCents: Number(prodForm.priceCents||0),
+                          stock: Number(prodForm.stock||0),
+                        }),
+                      })
+                      alert(r.ok ? "Producto guardado" : "Error guardando producto")
+                      if(r.ok) setProdForm({ sku: "", name:"", priceCents:"", stock:""})
+                    }}
+                    className="bg-blue-500 text-black hover:bg-blue-400"
+                  >
+                    Guardar Producto
+                  </Button>
+                </div>
 
-            <div className="space-y-2 max-h-64 overflow-auto pr-1">
-              {sales.length === 0 && <div className="text-xs text-white/60">Sin Pendientes</div>}
-              {sales.map((s) => (
-                <div key={s.id} className="border border-neutral-800 rounded p-2 text-sm space-y-1">
-                  <div className="flex justify-between">
-                    <div className="font-medium">{s.product?.name ?? s.productId}</div>
-                    <div className="opacity-60">{s.status}</div>
-                  </div>
-                  <div> Cant: {s.qty} </div>
+                <div className="space-y-2 pt-1">
+                  <div className="text-sm opacity-70">Intentar venta</div>
+                  <Input placeholder="SKU" value={intentForm.sku} onChange={(e)=>setIntentForm(p=>({...p, sku:e.target.value}))} className="bg-neutral-800 border-neutral-700 text-white"/>
+                  <Input placeholder="Cantidad" value={intentForm.qty} onChange={(e)=>setIntentForm(p=>({...p, qty:e.target.value}))} className="bg-neutral-800 border-neutral-700 text-white"/>
                   <div className="flex gap-2">
                     <Button
                       size="sm"
-                      className="bg-emerald-600 text-black hover:bg-emerald-500"
                       onClick={async() => {
-                        const r = await fetch(`api/sales/${s.id}/mark-paid`, {
+                        const r = await fetch("/api/sales/intent", {
                           method: "POST",
                           headers: {"Content-Type":"application/json"},
-                          body: JSON.stringify({ password: admiPw }),
+                          body: JSON.stringify({sku: intentForm.sku, qty: Number(intentForm.qty||1)}),
                         })
-                        if(!r.ok) { alert("contraseña invalida o error "); return }
+                        const data = await r.json()
+                        alert(data.prompt ?? (data.error || "Respuesta sin prompt"))
+                      }}
+                      className="bg-emerald-500 text-black hover:bg-emerald-400"
+                    >
+                      Probar intento
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={async() => {
+                        const r = await fetch("/api/sales/confirm",{
+                          method: "POST",
+                          headers: {"Content-Type":"application/json"},
+                          body: JSON.stringify({
+                            sku: intentForm.sku,
+                            qty: Number(intentForm.qty||1),
+                            paymentMethod: "cash",
+                          }),
+                        })
+                        const data = await r.json()
+                        alert(data.prompt ?? (data.error || "Respuesta sin prompt"))
                         await loadPendingSales()
                       }}
-                      >
-                         ✔
-                      </Button>
-                      <Button 
-                        size="sm"
-                        variant="destructive"
-                        onClick={async() => {
-                          const r = await fetch(`/api/sales/${s.id}/cancel`, {
-                            method: "POST",
-                            headers: {"Content-Type":"application/json"},
-                            body: JSON.stringify({ password: admiPw}),
-                          })
-                          if(!r.ok){alert("Contraseña invalida o error"); return}
-                          await loadPendingSales()
-                        }}
-                      >
-                        x
-                      </Button>
+                      className="bg-amber-600 text-black hover:bg-amber-500"
+                    >
+                      Confirmar
+                    </Button>
                   </div>
                 </div>
-              ))}
+
+                {/* Pendientes por pago */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="text-xs opacity-70">Pendientes por pago</div>
+                    <Button size="sm" variant="secondary" onClick={loadPendingSales}>Refrescar</Button>
+                  </div>
+
+                  <div className="space-y-2 max-h-64 overflow-auto pr-1">
+                    {sales.length === 0 && <div className="text-xs text-white/60">Sin Pendientes</div>}
+                    {sales.map((s) => (
+                      <div key={s.id} className="border border-neutral-800 rounded p-2 text-sm space-y-1 bg-neutral-900/50">
+                        <div className="flex justify-between">
+                          <div className="font-medium">{s.product?.name ?? s.productId}</div>
+                          <div className="opacity-60">{s.status}</div>
+                        </div>
+                        <div> Cant: {s.qty} </div>
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            className="bg-emerald-600 text-black hover:bg-emerald-500"
+                            onClick={async() => {
+                              const r = await fetch(`api/sales/${s.id}/mark-paid`, {
+                                method: "POST",
+                                headers: {"Content-Type":"application/json"},
+                                body: JSON.stringify({ password: admiPw }),
+                              })
+                              if(!r.ok) { alert("Contraseña inválida o error"); return }
+                              await loadPendingSales()
+                            }}
+                          >
+                            ✔
+                          </Button>
+                          <Button 
+                            size="sm"
+                            variant="destructive"
+                            onClick={async() => {
+                              const r = await fetch(`/api/sales/${s.id}/cancel`, {
+                                method: "POST",
+                                headers: {"Content-Type":"application/json"},
+                                body: JSON.stringify({ password: admiPw}),
+                              })
+                              if(!r.ok){alert("Contraseña inválida o error"); return}
+                              await loadPendingSales()
+                            }}
+                          >
+                            x
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </section>
+
+              {/* Lista de chats */}
+              <section className="space-y-3">
+                <h3 className="text-sm font-semibold text-white/80">Chats</h3>
+                <div className="space-y-2">
+                  {chats.map((c) => (
+                    <div key={c.id} className="flex items-center gap-2">
+                      <button
+                        onClick={() => setActiveChatId(c.id)}
+                        className={`w-full text-left px-3 py-2 rounded-lg border transition ${
+                          activaChatId === c.id
+                            ? 'border-blue-500 bg-blue-500/10'
+                            : 'border-neutral-800 hover:bg-neutral-900'
+                        }`}>
+                        <div className="truncate text-sm">{c.title || 'Sin título'}</div>
+                      </button>
+
+                      <Button
+                        size="icon"
+                        variant="destructive"
+                        className="border-neutral-800 bg-red-400 text-black hover:bg-red-300"
+                        onClick={() => deleteChat(c.id)}
+                        title="Eliminar chat"
+                      >
+                        X
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </section>
             </div>
           </div>
+        </aside>
 
-        </div>
 
-        <ScrollArea className="h-[calc(100vh-6rem)] pr-2">
-          <div className="space-y-2">
-            {chats.map((c) => (
-              <div key={c.id} className="flex items-center gap-2">
-                <button
-                  onClick={() => setActiveChatId(c.id)}
-                  className={`w-full text-left px-3 py-2 rounded-lg border ${activaChatId === c.id ? 'border-blue-500 bg-blue-500/10': 'border-neutral-800 hover:bg-neutral-900'}`}>
-                    <div className="truncate text-sm">{c.title || 'Sin titulo'}</div>
-                  </button>
-
-                  <Button
-                    size="icon"
-                    variant="destructive"
-                    className="border-neutral-800 bg-red-400 text-black hover:bg-red-300"
-                    onClick={() => deleteChat(c.id)}
-                    title="Eliminar chat"
-                  >
-                    X
-                  </Button>
-              </div>
-            ))}
+        {/* Chat (min-h-screen y con su propio scroll en mensajes) */}
+        <section className="col-span-9 h-[100dvh] flex flex-col overflow-hidden">
+          {/* Header fijo */}
+          <div className="shrink-0 px-4 py-3 border-b border-neutral-800 text-2xl opacity-80 text-white font-bold bg-neutral-900/80 backdrop-blur">
+            {activeChatTitle}
           </div>
-        </ScrollArea>
-      </aside>
 
-      {/* Chat */}
-      <section className="col-span-9 p-6">
-        <Card className="h-full bg-neutral-900 border-neutral-800 flex flex-col">
-          <CardContent className="p-0 flex flex-col h-full">
-            <div className="px-4 py-3 border-b border-neutral-800 text-2xl opacity-80 text-white font-bold">
-              {activeChatTitle}
-            </div>
-            
-            <ScrollArea className="flex-1 px-4 py-4">
-              <div className="space-y-3">
+          {/* Mensajes (SOLO esto scrollea) */}
+          <div className="flex-1 min-h-0 overflow-hidden">
+            <ScrollArea className="h-full">
+              <div className="px-4 py-4 space-y-3">
                 {messages.map((m) => (
                   <div 
                     key={m.id}
-                    className={`whitespace-pre-wrap leading-relaxed text-sm ${m.role === 'user' ? 'text-blue-300' : 'text-neutral-100' }`}
+                    className={`whitespace-pre-wrap leading-relaxed text-sm ${
+                      m.role === 'user' ? 'text-blue-300' : 'text-neutral-100'
+                    }`}
                   >
                     <span className="mr-2 text-xs opacity-60">
-                      {m.role === 'user' ? 'Tu: ' : 'Ayolin: '}
+                      {m.role === 'user' ? 'Tú:' : 'Ayolin:'}
                     </span>
                     {m.content}
                   </div>
@@ -373,22 +385,31 @@ export default function ChatPage(){
                 {loading && <div className="text-neutral-400 text-sm">Ayolin escribiendo...</div>}
               </div>
             </ScrollArea>
+          </div>
 
-            <form onSubmit={send} className="p-4 border-t border-neutral-800 flex gap-2">
+          {/* Input fijo abajo */}
+          <form onSubmit={send} className="shrink-0 p-4 border-t border-neutral-800 bg-neutral-900/80 backdrop-blur">
+            <div className="flex gap-2">
               <Input
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder="Escribe papi..."
+                placeholder="Escribe aquí…"
                 className="bg-neutral-800 border-neutral-700 text-white"
               />
-              <Button type="submit" disabled={loading || !input.trim()} className="bg-white text-black border-black hover:bg-white/90">
+              <Button
+                type="submit"
+                disabled={loading || !input.trim()}
+                className="bg-white text-black border-black hover:bg-white/90"
+              >
                 Enviar
               </Button>
-            </form>
-          </CardContent>
-        </Card>
-      </section>
-    </main>
-
+            </div>
+            <div className="pt-2 text-[11px] text-neutral-400">
+              Enter para enviar • Shift+Enter para nueva línea
+            </div>
+          </form>
+        </section>
+      </div>
+    </div>
   )
 }
