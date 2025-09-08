@@ -1,6 +1,5 @@
 export type ParsedOrder = { sku: string; qty: number };
 
-// Un SKU probable debe tener dígitos o separadores (evita palabras comunes como "QUIERO")
 export function isLikelySku(token: string) {
   const t = token.toUpperCase().trim();
   if (!/^[A-Z0-9._-]+$/.test(t)) return false;
@@ -12,7 +11,7 @@ export function isLikelySku(token: string) {
 export function parseOrder(text: string): ParsedOrder | null {
   const t = text.trim();
 
-  // a) "quiero 2 de SKU" / "comprar 2 SKU" / "compra 2 SKU"
+  // "quiero 2 de SKU" / "comprar 2 SKU"
   const reA = /\b(?:quiero|compra(?:r)?)\s+(\d+)\s+(?:de\s+)?([A-Za-z0-9._-]{2,})\b/i;
   const mA = t.match(reA);
   if (mA) {
@@ -21,7 +20,7 @@ export function parseOrder(text: string): ParsedOrder | null {
     if (isLikelySku(sku)) return { sku, qty };
   }
 
-  // b) "SKU x2"
+  // "SKU x2"
   const reB = /\b([A-Za-z0-9._-]{2,})\s*[xX]\s*(\d+)\b/;
   const mB = t.match(reB);
   if (mB) {
@@ -30,7 +29,7 @@ export function parseOrder(text: string): ParsedOrder | null {
     if (isLikelySku(sku)) return { sku, qty };
   }
 
-  // c) Sólo "SKU" (solo si parece SKU real)
+  // Solo "SKU"
   const reC = /\b([A-Za-z0-9._-]{2,})\b/;
   const mC = t.match(reC);
   if (mC) {
