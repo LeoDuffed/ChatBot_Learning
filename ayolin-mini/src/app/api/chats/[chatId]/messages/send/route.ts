@@ -8,7 +8,10 @@ import { extractKeywords, detectIntent, parseQuantityFromText } from "@/lib/text
 import { Prisma } from "@/generated/prisma";
 
 // Rol que le vamos a dar a nuestra ia
-const SYSTEM_PROMPT = 'Eres AYOLIN, un sistente personal claro y util. Responde en español de forma concisa y práctica.'
+const SYSTEM_PROMPT =   
+    "Eres AYOLIN, un asistente claro y útil. Responde en español de forma concisa y práctica. " +
+    "Cuando te pregunten por productos, EXISTEN solo los que están en la base de datos. " +
+    "No ofrezcas fotos, enlaces, ni acciones que no puedas realizar."
 
 type Pending = | { step: "await_qty"; productId: string; sku: string } | { step: "await_confirm"; productId: string; sku: string; qty: number}
 const pendingByChat = new Map<string, Pending>() // Estado temporal en memoria (sirve para mini-ayolin)
