@@ -140,16 +140,6 @@ npm run dev
 
 ---
 
-## 📌 Roadmap (corto)
-
-- Confirmación de reserva → `status: confirmed`.
-- Expiración automática de `held`.
-- Autenticación (NextAuth) y chats por usuario.
-- Conectores (Stripe, webhook inventario real).
-- Moderación / NLU mejorada (IA real).
-
----
-
 ## 🤝 Contribuir
 
 1. Haz fork y crea una rama: `feat/mi-mejora`.
@@ -160,7 +150,7 @@ npm run dev
 
 ## 📜 Licencia
 
-MIT. Úsalo, modifícalo y compártelo con atribución.
+Úsalo, modifícalo y compártelo con atribución.
 
 ---
 
