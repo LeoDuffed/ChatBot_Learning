@@ -26,7 +26,7 @@ export default function ChatPage(){
   const [sales, setSales] = useState<any[]>([])
   const [admiPw, setAdminPw] = useState("")
   const [prodForm, setProdForm] = useState({ sku:"", name:"", priceCents:"", stock:""})
-  const [intentForm, setIntentForm] = useState({ sku:"", qty: "1" })
+  const [intentForm, setIntentForm] = useState({ sku:"", qty: "" })
 
   // Auto scroll 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth'}) }, [messages])
