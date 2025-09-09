@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 
-export async function DELETE(_req: NextRequest, { params }: { params: { chatId: string } }) {
+export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ chatId: string }> }) {
     try{
-        const { chatId } = params;
+        const { chatId } = await params;
 
         // Verificamos si existe
         const chat = await db.chat.findUnique({ where: { id: chatId } })

@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic"
 export async function PUT(req: NextRequest){
     const { password } = await req.json().catch(() => ({}))
     if(!password || typeof password !== "string" || password.length < 4){
-        return NextResponse.json({ error: "Contraseña invalida"}, { status: 400})
+        return NextResponse.json({ error: "Contraseña inválida"}, { status: 400})
     }
 
     const bot = await getOrCreateMyBot()

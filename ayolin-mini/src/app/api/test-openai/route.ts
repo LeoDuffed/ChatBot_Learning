@@ -6,7 +6,7 @@ export async function POST(req: NextRequest){
     try{
         const { prompt } = await req.json()
         if(!prompt || typeof prompt !== "string"){
-            return NextResponse.json({ error: "Prompt invalido "}, { status: 400});
+            return NextResponse.json({ error: "Prompt inválido"}, { status: 400});
         }
 
         const result = await generateText({

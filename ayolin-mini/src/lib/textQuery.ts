@@ -5,7 +5,7 @@ export function normalize(str: string) {
     .replace(/[\u0300-\u036f]/g, "");
 }
 
-// Stopwords básicas (no quitamos nombres de productos: playera, pantalon, etc.)
+// Stopwords básicas (no quitamos nombres de productos: playera, pantalón, etc.)
 const STOPWORDS = new Set([
   "hola","buenas","buenos","dias","tardes","noches",
   "el","la","los","las","un","una","unos","unas",

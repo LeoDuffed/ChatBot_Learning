@@ -6,18 +6,19 @@ import { verifySalesPassword } from "@/lib/salesPassword";
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
-type Ctx = { params : { SaleId: string} }
+type Ctx = { params : Promise<{ saleId: string}> }
 
 export async function POST(req: NextRequest, { params }: Ctx){
     const bot = await getOrCreateMyBot()
 
     const { password } = await req.json().catch(() => ({}) )
     if(!(await verifySalesPassword(password ?? "", bot.salesPassHash))){
-        return NextResponse.json({ errpr: "Contraseña invalida "}, { status: 403})
+        return NextResponse.json({ error: "Contraseña inválida"}, { status: 403})
     }
 
+    const { saleId } = await params
     const sale = await db.sale.findFirst({
-        where: { id: params.SaleId, chatbotId: bot.id },
+        where: { id: saleId, chatbotId: bot.id },
         include: { product: true },
     })
     if(!sale) return NextResponse.json({ error: "Venta no encontrada" }, { status: 404 })

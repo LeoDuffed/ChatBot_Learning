@@ -12,7 +12,7 @@ export async function POST(req:NextRequest) {
     const normSku = String(sku ?? "").toUpperCase().trim()
 
     if(!normSku || want <= 0){
-        return NextResponse.json({ error: "datos invalidos"}, { status: 400})
+        return NextResponse.json({ error: "Datos inválidos"}, { status: 400})
     }
 
     const product = await db.product.findUnique({

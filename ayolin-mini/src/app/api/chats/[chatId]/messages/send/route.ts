@@ -7,7 +7,7 @@ import { parseOrder } from "@/lib/orderParser";
 import { extractKeywords, detectIntent, parseQuantityFromText } from "@/lib/textQuery";
 import { Prisma } from "@/generated/prisma";
 
-// Rol que le vamos a dar a nuestra ia
+// Rol que le vamos a dar a nuestra IA
 const SYSTEM_PROMPT =   
     "Eres AYOLIN, un asistente claro y útil. Responde en español de forma concisa y práctica. " +
     "Cuando te pregunten por productos, EXISTEN solo los que están en la base de datos. " +
@@ -41,20 +41,20 @@ function buildWhereOR(botId: string, tokens: string[]): Prisma.ProductWhereInput
     return { chatbotId: botId, OR}
 }
 
-export async function POST(req: NextRequest, { params }: { params: Promise<{ chatId: string }> }){ // Endpoint dinamico
+export async function POST(req: NextRequest, { params }: { params: Promise<{ chatId: string }> }){ // Endpoint dinámico
     try{
         const { chatId } = await params
-        const { text } = await req.json() as { text: string } // Leemos el chatId y el mns del usuario
+        const { text } = await req.json() as { text: string } // Leemos el chatId y el mensaje del usuario
 
         if(!text || !text.trim() ){
-            return NextResponse.json({ error: 'Texto vació' }, { status: 400 })
-        } // Si esta vacio respondemos con un Bad Request
+            return NextResponse.json({ error: 'Texto vacío' }, { status: 400 })
+        } // Si está vacío respondemos con un Bad Request
 
         // Validamos que exista el chat
         const chat = await db.chat.findUnique({ where: { id: chatId } })
         if(!chat) return NextResponse.json({ error: 'Chat not found '}, { status: 404 })
 
-        // Guardar mensajes del usuario
+        // Guardar mensaje del usuario
         await db.message.create({
             data: { chatId, role: 'user', content: text.trim() },
         })
@@ -64,7 +64,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cha
         const intent = detectIntent(text)
         const tokens = extractKeywords(text)
 
-        // 1 - Conversacion pendiente
+        // 1 - Conversación pendiente
         const pending = pendingByChat.get(chatId)
         if(pending){
             // Si piden cantidad mientras confirma la compra, cambiamos qty
@@ -74,7 +74,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cha
                 pendingByChat.set(chatId, pending)
             }
 
-            // Si preguntamos stock mientras esta pening, responde el stock de ese producto
+            // Si preguntan stock mientras está pendiente, responde el stock de ese producto
             if(/\b(cuantos|cuantas|cuánto|stock|quedan?)\b/i.test(text)){
                 const p = await db.product.findFirst({ where: { id: pending.productId, chatbotId: bot.id } })
                 if(!p){
@@ -83,17 +83,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cha
                         data: { chatId, role: "assistant", content: "No encuentro el producto ahora. Intentemos de nuevo." },
                         select: { id: true, role: true, content: true, createdAt: true },
                     })
-                    return NextResponse.json({ messages: assistantMessage })
+                    return NextResponse.json({ message: assistantMessage })
                 }
                 const msg = p.stock > 0 ? `De ${p.name} (SKU ${p.sku}) tengo ${p.stock} disponibles.` : `De ${p.name} (SKU ${p.sku}) no tengo stock ahora.`;
                 const assistantMessage = await db.message.create({
                     data: { chatId, role: "assistant", content: msg },
                     select: { id: true, role: true, content: true, createdAt: true },
                 })
-                return NextResponse.json({ messages: assistantMessage })
+                return NextResponse.json({ message: assistantMessage })
             }
 
-            // En la confirmacion si puso nueva cantidad la actualizamod
+            // En la confirmación si puso nueva cantidad la actualizamos
             if(/(^|\b)s[ií]\b/.test(normalized)){
                 const pend = pending as Extract<Pending, { step: "await_confirm"}>
                 // Si estaba en await_qty, hay que pedir cantidad primero
@@ -173,11 +173,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cha
                 return NextResponse.json({ message: assistantMessage })
             }
 
-            // Si el usuario cambio de intencion, seguimos abajo con busqeuda normal
+            // Si el usuario cambió de intención, seguimos abajo con búsqueda normal
         }
 
-        // 2 - Busqueda en la base de datos e Intencion
-        // Intento directo de compra son SKU en el mismo texto
+        // 2 - Búsqueda en la base de datos e intención
+        // Intento directo de compra: SKU en el mismo texto
         const parsedBySku = parseOrder(text)
         if(parsedBySku){
             const product = await db.product.findUnique({
@@ -188,14 +188,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cha
                     data: { chatId, role: "assistant", content: `No encontré el SKU ${parsedBySku.sku}.` },
                     select: { id: true, role: true, content: true, createdAt: true },
                 })
-                return NextResponse.json({ messages: assistantMessage })
+                return NextResponse.json({ message: assistantMessage })
             }
             if(product.stock < parsedBySku.qty){
                 const assistantMessage = await db.message.create({
                     data: { chatId, role: "assistant", content: `Solo tengo ${product.stock} de ${product.name}. ¿Quieres ajustar la cantidad?` },
                     select: { id: true, role: true, content: true, createdAt: true },
                 })
-                return NextResponse.json({ messages: assistantMessage })
+                return NextResponse.json({ message: assistantMessage })
             }
             // Dejamos la confirmacion pendiente
             pendingByChat.set(chatId, { step: "await_confirm", productId: product.id, sku: product.sku, qty: parsedBySku.qty })
@@ -208,7 +208,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cha
             return NextResponse.json({ message: assistantMessage })
         }
 
-        // Busqeuda por key words dependiendo de la intencion
+        // Búsqueda por palabras clave dependiendo de la intención
         const whereAND = tokens.length ? buildWhereAND(bot.id, tokens) : { chatbotId: bot.id } as Prisma.ProductWhereInput
 
         let results = await db.product.findMany({
@@ -217,7 +217,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cha
             take: 5,
         })
 
-        // Si and no trae nada, intentamos con or
+        // Si AND no trae nada, intentamos con OR
         if(results.length === 0 && tokens.length){
             const whereOR = buildWhereOR(bot.id, tokens)
             results = await db.product.findMany({
@@ -227,7 +227,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cha
             })
         }
 
-        // Si la itencion es sobre el inventario, precio, stock o compra, responde basado en ls db
+        // Si la intención es sobre inventario, precio, stock o compra, responde basado en la DB
         if(intent){
             if(results.length === 0){
                 const assistantMessage = await db.message.create({
@@ -253,7 +253,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cha
                     return NextResponse.json({ message: assistantMessage })
                 }
 
-                if(intent ==="ask_stock" || intent === "ask_availability"){
+                if(intent === "ask_stock" || intent === "ask_availability"){
                     const disp = p.stock > 0 ? `Sí, tengo ${p.stock} disponibles` : "No, está agotado"
                     const msg = `${disp} de ${p.name} (SKU ${p.sku}). Precio: $${priceStr(p.priceCents)}.`
                     const assistantMessage = await db.message.create({
@@ -275,8 +275,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cha
                 }
             }
 
-            // Codigo para la coincidencias
-            const msg = `Encontré varias opciones:\n${listLines(results)}\n\nElige por SKU (ej: ${results[0].sku})${ intent === "buy" ? " y dime cuantas" : "" }.`
+            // Código para coincidencias
+            const msg = `Encontré varias opciones:\n${listLines(results)}\n\nElige por SKU (ej: ${results[0].sku})${ intent === "buy" ? " y dime cuántas" : "" }.`
             const assistantMessage = await db.message.create({
                 data: { chatId, role: "assistant", content: msg },
                 select: { id: true, role: true, content: true, createdAt: true },
@@ -284,7 +284,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cha
             return NextResponse.json({ message: assistantMessage })
         }
 
-        // 3 - Fallback LLM si no hay intencion clara
+        // 3 - Fallback LLM si no hay intención clara
 
         // Tomamos los ultimos 30 mensajes de contexto
         const history = await db.message.findMany({
@@ -293,13 +293,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cha
             take: 30,
         })
 
-        //Convertir al formato del AI SDK
+        // Convertir al formato del AI SDK
         const messages = history.map((m) => ({
             role: m.role === 'user' ? ('user' as const) : ('assistant' as const ),
             content: m.content, 
         }))
 
-        //Llamamos a OpenAI
+        // Llamamos a OpenAI
         const result = await generateText({
             model: openai('gpt-4.1-nano'),
             system: SYSTEM_PROMPT,
@@ -312,24 +312,24 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cha
         Es un método de JavaScript que elimina los espacios en blanco al inicio y al final de un string.
         Sirve para asegurarse de que el texto esté "limpio" antes de guardarlo en la base de datos o mostrarlo en pantalla.
         */
-        const reply = result.text?.trim() || 'En que te puedo ayudar?' // Si texto generado por la ia viene vacia o no existe responemod ...
+        const reply = result.text?.trim() || '¿En qué te puedo ayudar?' // Si el texto generado por la IA viene vacío o no existe, respondemos...
 
-        const [assistantMessage ] = await Promise.all([ // Con Promise.all hacemos estas dos cosas al mismo timepo
+        const [assistantMessage ] = await Promise.all([ // Con Promise.all hacemos estas dos cosas al mismo tiempo
             db.message.create({
                 data: { chatId, role: 'assistant', content: reply },
                 select: { id: true, role: true, content: true, createdAt: true},
-            }), // Guardamos el mensaje de respuesta en la bd del chatbot
+            }), // Guardamos el mensaje de respuesta en la BD del chatbot
             (!chat.title || chat.title === "Nuevo chat" ) && 
                 db.chat.update({
                     where: {id: chatId },
                     data: { title: text.slice(0,40) },
-            }), // Si aun no tiene titulo se lo ponemos con los primeros 40 caracteres
+            }), // Si aún no tiene título se lo ponemos con los primeros 40 caracteres
         ])
 
         return NextResponse.json({
             message: assistantMessage,
             usage: result.totalUsage,
-        }) // Devolevemos al fontend el mns del chatbot + estaditicas de uso de token
+        }) // Devolvemos al frontend el mensaje del chatbot + estadísticas de uso de tokens
     } catch(e){
         console.error(e)
         return NextResponse.json({error: 'Server error' }, { status: 500 })

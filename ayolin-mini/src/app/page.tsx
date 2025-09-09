@@ -18,13 +18,13 @@ type Msg = { id: string; role: 'user' | 'assistant'; content: string; createdAt:
 
 export default function ChatPage(){
   const [chats, setChats] = useState<Chat[]>([])
-  const [activaChatId, setActiveChatId] = useState<string|null>(null)
+  const [activeChatId, setActiveChatId] = useState<string|null>(null)
   const [messages, setMessages] = useState<Msg[]>([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const endRef = useRef<HTMLDivElement>(null)
   const [sales, setSales] = useState<any[]>([])
-  const [admiPw, setAdminPw] = useState("")
+  const [adminPw, setAdminPw] = useState("")
   const [prodForm, setProdForm] = useState({ sku:"", name:"", priceCents:"", stock:""})
   const [intentForm, setIntentForm] = useState({ sku:"", qty: "" })
 
@@ -48,17 +48,17 @@ export default function ChatPage(){
   // Cargar chats al abrir
   useEffect(() => {loadChats() }, [])
 
-  // Si no hay chat activo seleccionamos el primero
+  // Si no hay chat activo, seleccionamos el primero
   useEffect(() => {
-    if(!activaChatId && chats.length > 0){
+    if(!activeChatId && chats.length > 0){
       setActiveChatId(chats[0].id)
     }
-  }, [chats, activaChatId])
+  }, [chats, activeChatId])
 
-  // Cuando cambiemos a chat activo hay que cargar los mns
+  // Cuando cambiemos a chat activo, hay que cargar los mensajes
   useEffect(() => {
-    if(activaChatId) loadMessages(activaChatId)
-  }, [activaChatId])
+    if(activeChatId) loadMessages(activeChatId)
+  }, [activeChatId])
 
   async function newChat(){
     const r = await fetch('/api/chats', {
@@ -87,7 +87,7 @@ export default function ChatPage(){
     // Actualización optimista + reajuste del chat activo si aplica
     setChats(prev => {
       const remaining = prev.filter(c => c.id !== chatId)
-      if(activaChatId === chatId){
+      if(activeChatId === chatId){
         const next = remaining[0]?.id ?? null
         setActiveChatId(next)
         setMessages([])
@@ -102,7 +102,7 @@ export default function ChatPage(){
     setLoading(true)
   
     // Si no hay chat hay que crear uno
-    let chatId = activaChatId
+    let chatId = activeChatId
     if(!chatId){
       const r = await fetch('/api/chats', { method: 'POST', headers: { 'Content-Type': 'application/json' } })
       const data = await r.json()
@@ -145,8 +145,8 @@ export default function ChatPage(){
   }
 
   const activeChatTitle = useMemo(
-    () => chats.find(c => c.id === activaChatId)?.title ?? 'Nuevo chat',
-    [chats, activaChatId]
+    () => chats.find(c => c.id === activeChatId)?.title ?? 'Nuevo chat',
+    [chats, activeChatId]
   )
 
   const loadPendingSales = useCallback(async () => {
@@ -177,7 +177,7 @@ export default function ChatPage(){
                   <div className="text-xs opacity-70">Contraseña del jefe</div>
                   <Input 
                     type="password" 
-                    value={admiPw} 
+                    value={adminPw} 
                     onChange={(e) => setAdminPw(e.target.value)} 
                     placeholder="Mínimo 4 caracteres" 
                     className="bg-neutral-800 border-neutral-700 text-white"
@@ -188,7 +188,7 @@ export default function ChatPage(){
                       const r = await fetch("/api/my-bot/settings/sales-password",{
                         method: "PUT",
                         headers: {"Content-Type":"application/json"},
-                        body: JSON.stringify({password: admiPw})
+                        body: JSON.stringify({password: adminPw})
                       })
                       alert(r.ok ? "Contraseña guardada" : "Error al guardar la contraseña")
                     }}
@@ -293,7 +293,7 @@ export default function ChatPage(){
                               const r = await fetch(`api/sales/${s.id}/mark-paid`, {
                                 method: "POST",
                                 headers: {"Content-Type":"application/json"},
-                                body: JSON.stringify({ password: admiPw }),
+                                body: JSON.stringify({ password: adminPw }),
                               })
                               if(!r.ok) { alert("Contraseña inválida o error"); return }
                               await loadPendingSales()
@@ -308,7 +308,7 @@ export default function ChatPage(){
                               const r = await fetch(`/api/sales/${s.id}/cancel`, {
                                 method: "POST",
                                 headers: {"Content-Type":"application/json"},
-                                body: JSON.stringify({ password: admiPw}),
+                                body: JSON.stringify({ password: adminPw}),
                               })
                               if(!r.ok){alert("Contraseña inválida o error"); return}
                               await loadPendingSales()
@@ -332,7 +332,7 @@ export default function ChatPage(){
                       <button
                         onClick={() => setActiveChatId(c.id)}
                         className={`w-full text-left px-3 py-2 rounded-lg border transition ${
-                          activaChatId === c.id
+                          activeChatId === c.id
                             ? 'border-blue-500 bg-blue-500/10'
                             : 'border-neutral-800 hover:bg-neutral-900'
                         }`}>

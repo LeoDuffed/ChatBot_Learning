@@ -18,7 +18,7 @@ export async function GET(req: NextRequest){
     const where: any = { chatbotId: bot.id }
     if(q){
         where.OR = [
-            { name: { const: q, mode: "insensitive" } },
+            { name: { contains: q, mode: "insensitive" } },
             { sku: { contains: q, mode: "insensitive" } },
         ]
     }
@@ -39,13 +39,16 @@ export async function POST(req: NextRequest){
     const bot = await getOrCreateMyBot()
     const body = await req.json().catch(() => ({}) )
     const items = Array.isArray(body) ? body : [body]
-    const cleaned = items.map((x) => ({
-        sku: String(x.sku ?? "").trim().toUpperCase(),
-        name: String(x.name ?? "").trim(),
-        desciption: x.desciption ? String(x.desciption) : undefined,
-        priceCents: Number.isFinite(Number(x.priceCents)) ? Number(x.priceCents) : NaN,
-        stock: Number.isFinite(Number(x.stock)) ? Number(x.stock ) : 0,
-    })).filter((x) => x.sku && x.name && Number.isFinite(x.priceCents))
+    const cleaned = items.map((x) => {
+        const description = x.description ?? x.desciption
+        return {
+            sku: String(x.sku ?? "").trim().toUpperCase(),
+            name: String(x.name ?? "").trim(),
+            description: description ? String(description) : undefined,
+            priceCents: Number.isFinite(Number(x.priceCents)) ? Number(x.priceCents) : NaN,
+            stock: Number.isFinite(Number(x.stock)) ? Number(x.stock ) : 0,
+        }
+    }).filter((x) => x.sku && x.name && Number.isFinite(x.priceCents))
 
     if(cleaned.length === 0){
         return NextResponse.json({ error: "Datos inválidos"}, {status: 400})
@@ -57,7 +60,7 @@ export async function POST(req: NextRequest){
             where: { chatbotId_sku: { chatbotId: bot.id, sku: x.sku }},
             update: {
                 name: x.name,
-                description: x.desciption,
+                description: x.description,
                 priceCents: x.priceCents,
                 ...(typeof x.stock === "number" ? { stock: x.stock} : {}),
             },
@@ -65,7 +68,7 @@ export async function POST(req: NextRequest){
                 chatbotId: bot.id,
                 sku: x.sku,
                 name: x.name,
-                description: x.desciption,
+                description: x.description,
                 priceCents: x.priceCents,
                 stock: x.stock ?? 0,
             },

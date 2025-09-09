@@ -24,7 +24,7 @@ export async function POST(req: NextRequest){
     }
 
     if(!product) return NextResponse.json({ error: "Producto no encontrado"}, {status: 404 })
-    if(want <= 0) return NextResponse.json({ error: "Cantidad invalida "}, { status: 400 })
+    if(want <= 0) return NextResponse.json({ error: "Cantidad inválida"}, { status: 400 })
 
     const dec = await db.product.updateMany({
         where: { id: product.id, chatbotId: bot.id, stock: { gte: want }},
