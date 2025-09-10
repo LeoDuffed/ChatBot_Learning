@@ -3,6 +3,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getOrCreateMyBot } from "@/lib/bot";
+import { productEmbeddingInput, embedText } from "@/lib/embeddings";
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -19,7 +20,8 @@ export async function GET(req: NextRequest){
     if(q){
         where.OR = [
             { name: { contains: q, mode: "insensitive" } },
-            { sku: { contains: q, mode: "insensitive" } },
+            { sku: { contains: q.toUpperCase() } },
+            { description: { contains: q, mode: "insensitive"} },
         ]
     }
 
@@ -39,16 +41,13 @@ export async function POST(req: NextRequest){
     const bot = await getOrCreateMyBot()
     const body = await req.json().catch(() => ({}) )
     const items = Array.isArray(body) ? body : [body]
-    const cleaned = items.map((x) => {
-        const description = x.description ?? x.desciption
-        return {
-            sku: String(x.sku ?? "").trim().toUpperCase(),
-            name: String(x.name ?? "").trim(),
-            description: description ? String(description) : undefined,
-            priceCents: Number.isFinite(Number(x.priceCents)) ? Number(x.priceCents) : NaN,
-            stock: Number.isFinite(Number(x.stock)) ? Number(x.stock ) : 0,
-        }
-    }).filter((x) => x.sku && x.name && Number.isFinite(x.priceCents))
+    const cleaned = items.map((x) => ({
+        sku: String(x.sku ?? "").trim().toUpperCase(),
+        name: String(x.name ?? "").trim(),
+        description: x.description ? String(x.description) : undefined,
+        priceCents: Number.isFinite(Number(x.priceCents)) ? Number(x.priceCents) : NaN,
+        stock: Number.isFinite(Number(x.stock)) ? Number(x.stock) : 0,
+    })).filter((x) => x.sku && x.name && Number.isFinite(x.priceCents))
 
     if(cleaned.length === 0){
         return NextResponse.json({ error: "Datos inválidos"}, {status: 400})
@@ -73,7 +72,13 @@ export async function POST(req: NextRequest){
                 stock: x.stock ?? 0,
             },
         })
-        out.push(saved)
+
+        // Generamos/Actualizamod embedding
+        const input = productEmbeddingInput({ sku: saved.sku, name: saved.name, description: saved.description ?? "" })
+        const emb = await embedText(input)
+        const update = await db.product.update({ where: { id: saved.id }, data: { embedding: emb } })
+        
+        out.push(update)
     }
     return NextResponse.json({ ok: true, count: out.length, items: out})
 }

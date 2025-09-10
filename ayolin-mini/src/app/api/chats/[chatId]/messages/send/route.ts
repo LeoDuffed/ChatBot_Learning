@@ -3,15 +3,8 @@ import { db } from "@/lib/db";
 import { openai } from "@ai-sdk/openai";
 import { generateText } from "ai";
 import { getOrCreateMyBot } from "@/lib/bot";
-import { parseOrder } from "@/lib/orderParser";
-import { extractKeywords, detectIntent, parseQuantityFromText } from "@/lib/textQuery";
-import { Prisma } from "@/generated/prisma";
-
-// Rol que le vamos a dar a nuestra IA
-const SYSTEM_PROMPT =   
-    "Eres AYOLIN, un asistente claro y útil. Responde en español de forma concisa y práctica. " +
-    "Cuando te pregunten por productos, EXISTEN solo los que están en la base de datos. " +
-    "No ofrezcas fotos, enlaces, ni acciones que no puedas realizar."
+import { parseUtterance } from "@/lib/nlu";
+import { semanticSearchProducts, getProductBySku } from "@/lib/search";
 
 type Pending = | { step: "await_qty"; productId: string; sku: string } | { step: "await_confirm"; productId: string; sku: string; qty: number}
 const pendingByChat = new Map<string, Pending>() // Estado temporal en memoria (sirve para mini-ayolin)
@@ -23,32 +16,18 @@ function listLines(products: {sku: string; name: string; priceCents: number; sto
     return products.map(p => `• ${p.sku} — ${p.name} — $${priceStr(p.priceCents)} — stock ${p.stock}`).join("\n");
 }
 
-function buildWhereAND(botId: string, tokens: string[]): Prisma.ProductWhereInput {
-    const AND: Prisma.ProductWhereInput[] = tokens.map((tok) => ({
-        OR: [
-            { name: { contains: tok, mode: "insensitive" as const } },
-            { sku: { contains: tok.toUpperCase() } },
-        ]
-    }))
-    return { chatbotId: botId, AND }
-}
-
-function buildWhereOR(botId: string, tokens: string[]): Prisma.ProductWhereInput {
-    const OR: Prisma.ProductWhereInput[] = tokens.flatMap((tok) => ([
-        { name: { contains: tok, mode: "insensitive" as const } },
-        { sku: { contains: tok.toUpperCase() } },
-    ]))
-    return { chatbotId: botId, OR}
-}
+const SAFE_RESPONDER_SYSTEM = `
+Eres AYOLIN. Redacta natural en español SOLO con los "hechos" que te paso.
+Si un dato (precio, stock) no aparece en hechos, NO LO INVENTES.
+No ofrezcas acciones que no existen (fotos, enlaces, tracking).
+`.trim()
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ chatId: string }> }){ // Endpoint dinámico
     try{
         const { chatId } = await params
         const { text } = await req.json() as { text: string } // Leemos el chatId y el mensaje del usuario
 
-        if(!text || !text.trim() ){
-            return NextResponse.json({ error: 'Texto vacío' }, { status: 400 })
-        } // Si está vacío respondemos con un Bad Request
+        if(!text?.trim()) return NextResponse.json({ error: "Texto vacio"} , { status: 400 })
 
         // Validamos que exista el chat
         const chat = await db.chat.findUnique({ where: { id: chatId } })
@@ -60,120 +39,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cha
         })
 
         const bot = await getOrCreateMyBot()
-        const normalized = text.trim().toLowerCase()
-        const intent = detectIntent(text)
-        const tokens = extractKeywords(text)
 
         // 1 - Conversación pendiente
         const pending = pendingByChat.get(chatId)
         if(pending){
-            // Si piden cantidad mientras confirma la compra, cambiamos qty
-            const qtyInText = parseQuantityFromText(text)
-            if(pending.step === "await_confirm" && qtyInText && qtyInText !== pending.qty){
-                pending.qty = qtyInText
+            const low = text.trim().toLowerCase()
+
+            // cantidad mientras confirmamos: "si 3" / "quiero 5"
+            const qtyMatch = low.match(/\b(\d{1,3})\b/)
+            if(pending.step === "await_confirm" && qtyMatch){
+                pending.qty = Math.max(1, parseInt(qtyMatch[1], 10))
                 pendingByChat.set(chatId, pending)
             }
 
-            // Si preguntan stock mientras está pendiente, responde el stock de ese producto
-            if(/\b(cuantos|cuantas|cuánto|stock|quedan?)\b/i.test(text)){
-                const p = await db.product.findFirst({ where: { id: pending.productId, chatbotId: bot.id } })
-                if(!p){
-                    pendingByChat.delete(chatId)
-                    const assistantMessage = await db.message.create({
-                        data: { chatId, role: "assistant", content: "No encuentro el producto ahora. Intentemos de nuevo." },
-                        select: { id: true, role: true, content: true, createdAt: true },
-                    })
-                    return NextResponse.json({ message: assistantMessage })
-                }
-                const msg = p.stock > 0 ? `De ${p.name} (SKU ${p.sku}) tengo ${p.stock} disponibles.` : `De ${p.name} (SKU ${p.sku}) no tengo stock ahora.`;
-                const assistantMessage = await db.message.create({
-                    data: { chatId, role: "assistant", content: msg },
-                    select: { id: true, role: true, content: true, createdAt: true },
-                })
-                return NextResponse.json({ message: assistantMessage })
-            }
-
-            // En la confirmación si puso nueva cantidad la actualizamos
-            if(/(^|\b)s[ií]\b/.test(normalized)){
-                const pend = pending as Extract<Pending, { step: "await_confirm"}>
-                // Si estaba en await_qty, hay que pedir cantidad primero
-                if(pend?.step !== "await_confirm"){
-                    const assistantMessage = await db.message.create({
-                        data: { chatId, role: "assistant", content: "¿Cuántas unidades necesitas?" },
-                        select: { id: true, role: true, content: true, createdAt: true },
-                    })
-                    return NextResponse.json({ message: assistantMessage })
-                }
-
-                pendingByChat.delete(chatId)
-
-                const product = await db.product.findFirst({ where: { id: pend.productId, chatbotId: bot.id } })
-                if(!product){
-                    const assistantMessage = await db.message.create({
-                        data: { chatId, role: "assistant", content: "No encontré el producto al confirmar. Inténtalo de nuevo."},
-                        select: { id: true, role: true, content: true, createdAt: true },
-                    })
-                    return NextResponse.json({ message: assistantMessage })
-                }
-
-                const want = Math.max(1, pend.qty)
-                const dec = await db.product.updateMany({
-                    where: { id: product.id, chatbotId: bot.id, stock: { gte: want } },
-                    data: { stock: { decrement: want } },
-                })
-                if(dec.count !== 1){
-                    const fresh = await db.product.findFirst({ where: { id: product.id } })
-                    const assistantMessage = await db.message.create({
-                        data: {
-                            chatId, 
-                            role: "assistant",
-                            content: `Ya no tengo stock suficiente. Disponible ahora: ${fresh?.stock ?? 0}.`,
-                        },
-                        select: { id: true, role: true, content: true, createdAt: true },
-                    })
-                    return NextResponse.json({ message: assistantMessage })
-                }
-
-                const sale = await db.sale.create({
-                    data: {
-                        chatbotId: bot.id,
-                        productId: product.id,
-                        qty: want,
-                        status: "pending_payment",
-                        paymentMethod: "cash",
-                    },
-                })
-                await db.inventoryLedger.create({
-                    data: {
-                        chatbotId: bot.id,
-                        productId: product.id,
-                        delta: -want,
-                        reason: "sale",
-                        ref: sale.id,
-                    },
-                })
-
-                const reply = `Listo. Aparté ${want} × ${product.name} (SKU ${product.sku}). Pedido **pendiente de pago**.`
-                const [assistantMessage] = await Promise.all([
-                    db.message.create({
-                        data: { chatId, role: "assistant", content: reply },
-                        select: { id: true, role: true, content: true, createdAt: true },
-                    }),
-                    (!chat.title || chat.title === "Nuevo chat") && db.chat.update({ where: { id: chatId }, data: { title:`Pedido ${product.sku} × ${want}` } }),
-                ])
-                return NextResponse.json({ message: assistantMessage })
-            }
-
-            if(/^no\b/i.test(normalized)){
-                pendingByChat.delete(chatId)
-                const assistantMessage = await db.message.create({
-                    data: { chatId, role: "assistant", content: "Perfecto, no realizo la compra. ¿Buscamos otra cosa?" },
-                    select: { id: true, role: true, content: true, createdAt: true },
-                })
-                return NextResponse.json({ message: assistantMessage })
-            }
-
-            // Si el usuario cambió de intención, seguimos abajo con búsqueda normal
         }
 
         // 2 - Búsqueda en la base de datos e intención
