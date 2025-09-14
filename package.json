@@ -1,8 +1,0 @@
-{
-  "dependencies": {
-    "@langchain/core": "^0.3.75",
-    "@langchain/langgraph": "^0.4.9",
-    "@langchain/openai": "^0.6.11",
-    "zod": "^3.25.76"
-  }
-}
