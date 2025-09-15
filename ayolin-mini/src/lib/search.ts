@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { Prisma } from "@/generated/prisma";
 import { db } from "./db";
 import { embedText, productEmbeddingInput, cosineSim } from "./embeddings";
@@ -9,7 +10,8 @@ function tokens(t: string){
         .normalize("NFD")
         .replace(/[\u0300-\u036f]/g, "")
         .replace(/[^a-z0-9._-\s]/g, " ")
-        .split(/\s+/).filter(Boolean);
+        .split(/\s+/)
+        .filter(Boolean);
 }
 
 function buildWhereAND(botId: string, toks: string[]): Prisma.ProductWhereInput{
@@ -53,29 +55,31 @@ export async function semanticSearchProducts(botId: string, query: string, k = 8
         take : 500,
     })
 
+    // Si no hay ninguno con embedding, usamos fallback textual
+    if(candidates.length === 0){
+        const toks = tokens(q)
+        if(toks.length === 0) return []
+        let items = await db.product.findMany({ 
+            where: buildWhereAND(botId, toks), 
+            take: k,
+            orderBy: { createdAt: "desc"},
+        })
+        if(items.length === 0){
+            items = await db.product.findMany({ 
+                where: buildWhereOR(botId, toks),
+                take: k,
+                orderBy: { createdAt: "desc"},
+            })
+        }
+        return items.map((it) => ({ ... it, score: 0.0001 } ))
+    }
+
     const ranked = candidates
         .map((p) => ({ p, score: cosineSim(qEmb, p.embedding as number[]) }))
         .sort((a, b) => b.score - a.score )
         .slice(0, k)
         .map(({p, score}) => ({...p, score }))
-
-    if(ranked.length === 0 || ranked[0].score < 0.2){
-        const toks = tokens(q)
-        if(toks.length === 0) return []
-        let items = await db.product.findMany({
-            where: buildWhereAND(botId, toks),
-            take: k,
-            orderBy: { createdAt: "desc" },
-        })
-        if(items.length === 0){
-            items = await db.product.findMany({
-                where: buildWhereOR(botId, toks),
-                take: k,
-                orderBy: { createdAt: "desc" },
-            })
-        }
-        return items.map((it) => ({ ...it, score: 0.0001 }))
-    }
+    
     return ranked
 }
 
@@ -91,8 +95,8 @@ export async function refreshProductEmbedding(productId:string) {
 
 // Lo uzamos para generar embeddings de todos los productos del bot
 export async function refreshAllEmbeddings(botId:string) {
-    const items = await db.product.findMany({ where: { chatbotId: botId }, select: { id: true, sku: true, name: true, description: true } })
-    const out = []
+    const items = await db.product.findMany({ where: { chatbotId: botId }, select: { id: true, sku: true, name: true, description: true } as any } as any )
+    const out: string[] = []
     for(const it of items){
         const input = productEmbeddingInput(it)
         const emb = await embedText(input)

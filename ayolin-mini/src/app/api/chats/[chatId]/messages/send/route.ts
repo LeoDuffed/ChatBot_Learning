@@ -9,7 +9,6 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 declare global {
-  // eslint-disable-next-line no-var
   var __compiledGraph: ReturnType<typeof buildGraph> | undefined;
 }
 function getGraph() {
