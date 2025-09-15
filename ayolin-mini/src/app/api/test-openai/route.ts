@@ -1,3 +1,5 @@
+// Primer codigo que hice con ia
+
 import { NextRequest, NextResponse } from "next/server";
 import { openai } from '@ai-sdk/openai'
 import { generateText } from "ai";
