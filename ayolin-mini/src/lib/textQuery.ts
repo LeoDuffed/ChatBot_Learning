@@ -5,7 +5,7 @@ export function normalize(str: string) {
     .replace(/[\u0300-\u036f]/g, "");
 }
 
-// Stopwords básicas (no quitamos nombres de productos: playera, pantalón, etc.)
+// Stopwords básicas (no quitamos nombres de productos)
 const STOPWORDS = new Set([
   "hola","buenas","buenos","dias","tardes","noches",
   "el","la","los","las","un","una","unos","unas",
@@ -13,15 +13,32 @@ const STOPWORDS = new Set([
   "que","qué","como","cómo","cual","cuál","donde","dónde",
   "tengo","hay","queda","quedan","disponible","disponibles",
   "quiero","comprar","compra","me","interesa","tu","tú","mi","su",
-  "si","sí","no"
+  "si","sí","no","por","favor","porfa","favorcito"
 ]);
+
+// Plural -> singular muy básico para mejorar búsquedas por nombre
+export function singularizeBasic(word: string): string {
+  const w = word.toLowerCase();
+  if (w.endsWith("es")) {
+    // pantalones -> pantalon, zapatos -> zapato, camiones -> camion
+    return w.slice(0, -2);
+  }
+  if (w.endsWith("s") && !w.endsWith("is")) {
+    // camisas -> camisa, jeans -> jean, pero 'tenis' se queda
+    return w.slice(0, -1);
+  }
+  return w;
+}
 
 export function extractKeywords(text: string): string[] {
   const t = normalize(text).replace(/[^a-z0-9._-\s]/g, " ");
-  return t
-    .split(/\s+/)
-    .filter((w) => w.length >= 2 && !STOPWORDS.has(w))
-    .slice(0, 6);
+  const raw = t.split(/\s+/).filter((w) => w.length >= 2 && !STOPWORDS.has(w));
+  // devolvemos hasta 6 keywords en singular básico
+  const canon = raw.map(singularizeBasic);
+  // elimina duplicados manteniendo orden
+  const uniq: string[] = [];
+  for (const k of canon) if (!uniq.includes(k)) uniq.push(k);
+  return uniq.slice(0, 6);
 }
 
 const NUMBER_WORDS: Record<string, number> = {
@@ -43,10 +60,10 @@ export function parseQuantityFromText(text: string): number | null {
 
 export type Intent =
   | "buy"
-  | "ask_inventory"
-  | "ask_availability"
-  | "ask_stock"
-  | "ask_price"
+  | "ask_inventory"     // mostrar catálogo / qué tienes
+  | "ask_availability"  // ¿tienes X?
+  | "ask_stock"         // ¿cuántos te quedan?
+  | "ask_price"         // ¿cuánto cuesta?
   | null;
 
 export function detectIntent(text: string): Intent {
@@ -56,17 +73,30 @@ export function detectIntent(text: string): Intent {
   if (/\b(quiero|comprar|compra|me\s+lo\s+llevo|me\s+llevo|agrega|añade|sumar)\b/.test(t)) {
     return "buy";
   }
-  // inventario general
-  if (/\b(que\s+tienes|qué\s+tienes|que\s+vendes|catalogo|catálogo|muestrame|muéstrame|mostrar)\b/.test(t)) {
+
+  // inventario general (ampliado)
+  if (
+    /\b(que\s+tienes|qué\s+tienes|que\s+vendes|catalogo|catálogo|muestrame|muestráme|muéstrame|mostrar|muestra|muestras|ensename|enséñame|ver\s+inventario|ver\s+stock)\b/.test(
+      t
+    )
+  ) {
     return "ask_inventory";
   }
+
   // disponibilidad / stock / precio
-  if (/\b(tienes|hay|manejas|vendes|disponible|disponibles)\b/.test(t)) {
+  if (/\b(tienes|hay|manejas|vendes|disponible|disponibles|stock)\b/.test(t)) {
     if (/\b(precio|cuanto\s+cuesta|cuánto\s+cuesta|vale|coste)\b/.test(t)) return "ask_price";
     if (/\b(cuantos|cuantas|cuánto|cuantos\s+te\s+quedan|stock|quedan?)\b/.test(t)) return "ask_stock";
     return "ask_availability";
   }
+
   if (/\b(precio|cuanto\s+cuesta|cuánto\s+cuesta|vale|coste)\b/.test(t)) return "ask_price";
 
   return null;
+}
+
+// Útil si quieres extraer explícitamente "sku: ABC123" de frases
+export function extractSkuFromText(text: string): string | null {
+  const m = text.match(/\bsku\b[^A-Za-z0-9._-]*([A-Za-z0-9._-]{2,})/i);
+  return m?.[1]?.toUpperCase() ?? null;
 }

@@ -29,11 +29,10 @@ export function parseOrder(text: string): ParsedOrder | null {
     if (isLikelySku(sku)) return { sku, qty };
   }
 
-  // Solo "SKU"
-  const reC = /\b([A-Za-z0-9._-]{2,})\b/;
-  const mC = t.match(reC);
-  if (mC) {
-    const sku = mC[1].toUpperCase();
+  // NUEVO: buscar TODOS los tokens y quedarnos con el primero que parezca SKU
+  const tokens = t.match(/[A-Za-z0-9._-]{2,}/g) || [];
+  for (const tok of tokens) {
+    const sku = tok.toUpperCase();
     if (isLikelySku(sku)) return { sku, qty: 1 };
   }
 
