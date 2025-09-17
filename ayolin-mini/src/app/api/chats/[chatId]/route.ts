@@ -9,11 +9,9 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
         const chat = await db.chat.findUnique({ where: { id: chatId } })
         if(!chat) return NextResponse.json({error: "Chat not found"}, {status: 404 })
         
-        // Hay que borrar primero los mns y luego el chat
-        await db.$transaction([
-            db.message.deleteMany({ where: { chatId } }),
-            db.chat.delete({ where: { id: chatId } }),
-        ])
+        // Eliminamos primero los mensajes para evitar conflictos de FK
+        await db.message.deleteMany({ where: { chatId } })
+        await db.chat.delete({ where: { id: chatId } })
 
         return new NextResponse(null, { status: 204 })
     } catch(e){
