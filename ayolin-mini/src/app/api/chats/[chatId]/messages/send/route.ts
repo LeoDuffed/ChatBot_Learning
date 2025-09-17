@@ -536,7 +536,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cha
         return NextResponse.json({ message: assistantMessage })
     }
     
-
     // 3) Fallback —> agente con tools (anti-alucinaciones)
     // Tomamos últimos 30 mensajes como contexto
     const history = await db.message.findMany({
