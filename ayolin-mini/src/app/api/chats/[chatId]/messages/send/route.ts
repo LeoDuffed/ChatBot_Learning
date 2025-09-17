@@ -492,7 +492,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cha
                 return NextResponse.json({ messgae: assistantMessage })
             }
 
-            // Guardamos el candidato unico para qty
+            // Guardamos el candidato unico para qty    
             setCandidates(chatId, [p.id])
 
             if(intent === "ask_price"){
