@@ -2,7 +2,7 @@
 
 import type { Tool } from "./types";
 import { zodToJsonSchema } from "zod-to-json-schema";
-import { searchInventoryTool, getBySkuTool, checkStockTool } from "./inventory";
+import { searchInventoryTool, getBySkuTool, checkStockTool, productsSearchTool } from "./inventory";
 import type { ZodTypeAny } from "zod";
 
 // Use `any` to erase generic variance across different tool input schemas
@@ -10,6 +10,7 @@ export const tools: Tool<any, any>[] = [
     searchInventoryTool,
     getBySkuTool,
     checkStockTool,
+    productsSearchTool,
 ]
 
 function toOpenAIParams(schema: ZodTypeAny, name: string){

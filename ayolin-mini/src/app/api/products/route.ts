@@ -3,6 +3,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getOrCreateMyBot } from "@/lib/bot";
+import { searchProductsText } from "@/lib/textSearch";
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -15,13 +16,15 @@ export async function GET(req: NextRequest){
     const page = Number(searchParams.get("page") ?? "1")
     const pageSize = Math.min(Number(searchParams.get("pageSize") ?? "20"), 100)
 
-    const where: any = { chatbotId: bot.id }
-    if(q){
-        where.OR = [
-            { name: { contains: q, mode: "insensitive" } },
-            { sku: { contains: q, mode: "insensitive" } },
-        ]
+    // Si hay query, usamos ProSearch ($text) y devolvemos top-N sin paginar
+    if(q.length >= 2){
+        const items = await searchProductsText({
+            db, botId: bot.id, query: q, limit: pageSize
+        })
+        return NextResponse.json({ items, total: items.length, page: 1, pageSize: items.length })
     }
+
+    const where: any = { chatbotId: bot.id }
 
     const [ items, total ] = await Promise.all([
         db.product.findMany({

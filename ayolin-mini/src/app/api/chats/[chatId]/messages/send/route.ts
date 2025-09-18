@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from "next/server" 
 import { db } from "@/lib/db" 
 import { getOrCreateMyBot } from "@/lib/bot" 
@@ -8,8 +9,8 @@ import {
     parseQuantityFromText,
     singularizeBasic, 
 } from "@/lib/textQuery" 
-import { Prisma } from "@/generated/prisma" 
 import { runMiniAyolinTurn } from "@/ai/agent" 
+import { searchProductsText } from "@/lib/textSearch"
 
 type Pending = | { step: "await_qty";  productId: string;  sku: string } | { step: "await_confirm";  productId: string;  sku: string;  qty: number }
 
@@ -40,34 +41,6 @@ function priceStr(cents: number) {
 }
 function listLines(products: { sku: string;  name: string;  priceCents: number;  stock: number }[]) {
   return products.map((p) => `• ${p.sku} — ${p.name} — $${priceStr(p.priceCents)} — stock ${p.stock}`).join("\n") 
-}
-
-function buildWhereAND(botId: string, tokens: string[]): Prisma.ProductWhereInput {
-    const AND: Prisma.ProductWhereInput[] = tokens.map((tok) => {
-        const t = tok
-        const s = singularizeBasic(tok)
-        const set = Array.from(new Set([t, s].filter(Boolean)))
-        return{
-            OR: set.flatMap((w) => [
-                { name: { contains: w, mode: "insensitive" as const } },
-                { sku: { contains: w.toUpperCase() } },
-            ]),
-        }
-    }) 
-  return { chatbotId: botId, AND } 
-}
-
-function buildWhereOR(botId: string, tokens: string[]): Prisma.ProductWhereInput {
-    const pairs = tokens.flatMap((tok) => {
-        const t = tok
-        const s = singularizeBasic(tok)
-        const set = Array.from(new Set([t, s].filter(Boolean)))
-        return set.flatMap((w) => [
-            { name: { contains: w, mode: "insensitive" as const } },
-            { sku: { contains: w.toUpperCase() } },
-        ])
-    })
-    return { chatbotId: botId, OR: pairs }
 }
 
 // Negativas "limpias"
@@ -455,44 +428,62 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cha
     }
 
     // 2c) Busqueda por palabras clabes
-    const whereAND = tokens.length ? buildWhereAND(bot.id, tokens) : ({ chatbotId: bot.id } as Prisma.ProductWhereInput)
-
-    let results = await db.product.findMany({
-        where: whereAND,
-        orderBy: { createdAt: "desc" },
-        take: 5,
+    const qText = text.trim()
+    let results = await searchProductsText({
+        db, botId: bot.id, query: qText, limit: 5
     })
 
+    // Falback 
     if(results.length === 0 && tokens.length){
-        const whereOR = buildWhereOR(bot.id, tokens)
-        results = await db.product.findMany({
+        const whereOR = {
+            chatbotId: bot.id,
+            OR: tokens.flatMap((tok) => {
+                const s = singularizeBasic(tok)
+                const set = Array.from(new Set([tok, s].filter(Boolean)))
+                return set.flatMap((w) => [
+                    { name: { contains: w, mode: "insensitive" as const } },
+                    { sku: { contains: w.toUpperCase() } },
+                    { description: { contains: w, mode: "insensitive" as const } },
+                ])
+            })
+        } as any
+    
+        const fallback = await db.product.findMany({
             where: whereOR,
-            orderBy: { createdAt: "desc" },
+            orderBy: { updatedAt: "desc" },
             take: 5,
         })
+
+        results = fallback.map((p) => ({
+            id: String(p.id),
+            sku: p.sku,
+            name: p.name,
+            description: p.description ?? null,
+            priceCents: p.priceCents,
+            stock: p.stock ?? 0,
+            score: undefined,
+        }))
     }
 
     if(intent){
         if(results.length === 0){
             const assistantMessage = await db.message.create({
                 data: { chatId, role: "assistant", content: "No encontré productos con esa descripción. ¿Tienes el SKU exacto o quieres que te muestre lo que tengo en stock?" },
-                select: { id: true, role: true, content: true, createdAt: true },
+                select: { id: true, role: true, content: true, createdAt: true }
             })
             return NextResponse.json({ message: assistantMessage })
         }
 
         if(results.length === 1){
             const p = results[0]
-
             if(p.stock <= 0){
                 const assistantMessage = await db.message.create({
                     data: { chatId, role: "assistant", content: `${p.name} está agotado actualmente.` },
                     select: { id: true, role: true, content: true, createdAt: true },
                 })
-                return NextResponse.json({ messgae: assistantMessage })
+                return NextResponse.json({ message: assistantMessage })
             }
 
-            // Guardamos el candidato unico para qty    
             setCandidates(chatId, [p.id])
 
             if(intent === "ask_price"){
@@ -504,7 +495,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cha
                 return NextResponse.json({ message: assistantMessage })
             }
 
-            if(intent === "ask_stock" || intent == "ask_availability"){
+            if(intent === "ask_stock" || intent === "ask_availability"){
                 const disp = p.stock > 0 ? `Sí, tengo ${p.stock} disponibles` : "No, está agotado"
                 const msg = `${disp} de ${p.name} (SKU ${p.sku}). Precio: $${priceStr(p.priceCents)}.`
                 const assistantMessage = await db.message.create({
@@ -521,14 +512,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cha
                     data: { chatId, role: "assistant", content: msg },
                     select: { id: true, role: true, content: true, createdAt: true },
                 })
-                return NextResponse.json({ messaqe: assistantMessage })
+                return NextResponse.json({ message: assistantMessage })
             }
         }
 
-        // Si hay varias coincidencias -> recordamos candidato/s
-        setCandidates(chatId, results.map((p) => p.id))
-
-        const msg = `Encontré varias opciones:\n${listLines(results)}\n\nElige por SKU (ej: ${ results[0].sku }) ${intent === "buy" ? " y dime cuántas" : "" }.`
+        // Varias coincidencias -> recordamos candidatos
+        setCandidates(chatId, results.map((p) => p.id ))
+        const nice = results.map((p) => `• ${p.sku} — ${p.name} — $${priceStr(p.priceCents)} — stock ${p.stock}` ).join("\n")
+        const msg = `Encontré varias opciones:\n${nice}\n\nElige por SKU (ej: ${results[0].sku})${intent === "buy" ? " y dime cuántas" : ""}.`
         const assistantMessage = await db.message.create({
             data: { chatId, role: "assistant", content: msg },
             select: { id: true, role: true, content: true, createdAt: true },
