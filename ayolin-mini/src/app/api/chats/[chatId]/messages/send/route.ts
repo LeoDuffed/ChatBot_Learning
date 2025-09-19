@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+
 import { NextRequest, NextResponse } from "next/server" 
 import { db } from "@/lib/db" 
 import { getOrCreateMyBot } from "@/lib/bot" 
@@ -66,6 +67,30 @@ function wantsAllAvailable(text: string){
     return ( /\b(los\s+dos|los\s+2|ambos|todo(?:\s+el)?\s+stock|todos|me\s+llevo\s+todos|me\s+llevo\s+los\s+dos)\b/.test(t) )
 }
 
+// Helpers de seleccion por nombre
+function normTokens(tokens: string[]): string[]{
+    return tokens.map((t) => singularizeBasic(t).toLowerCase().trim()).filter((t) => t.length >= 2)
+}
+
+function tokensInText(allTokens: string[], s?: string | null): boolean {
+    if(!s || allTokens.length === 0) return false
+    const low = s.toLowerCase()
+    return allTokens.every((t) => low.includes(t))
+}
+
+// Si el primer resultado es mejor 
+function pickStrongTop<T extends { name: string; description?: string | null; score?: number }>(results: T[], tokens: string[]): T | null{
+    if(!results.length) return null
+    const top = results[0]
+    const secondScore = results[1]?.score ?? 0
+    const topScore = top.score ?? 0
+
+    const nameCovers = tokensInText(tokens, top.name) || tokensInText(tokens, top.description)
+    const scoreClear = topScore >= secondScore + 0.5 || (secondScore > 0 ? topScore / secondScore >= 1.3 : topScore > 0)
+    
+    if(nameCovers || scoreClear) return top
+    return null
+}
 export const runtime = "nodejs" 
 export const dynamic = "force-dynamic" 
 
@@ -89,6 +114,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cha
     const normalized = text.trim().toLowerCase() 
     const intent = detectIntent(text) 
     const tokens = extractKeywords(text) 
+    const qtyInText = parseQuantityFromText(text) || 0
+    const normToks = normTokens(tokens)
 
     // Si hay candidatos recordados y No hay pending -> intentamos una selccion natural
     const remembered = getCandidates(chatId)
@@ -96,7 +123,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cha
         if(remembered.length === 1){
             const p = await db.product.findFirst({ where: { id: remembered[0], chatbotId: bot.id } })
             if(p){
-
                 if(wantsAllAvailable(text)){
                     const want = Math.max(1, p.stock)
                     if(want <= 0){
@@ -116,8 +142,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cha
                     return NextResponse.json({ message: assistantMessage })
                 }
 
-                const qtyInText = parseQuantityFromText(text)
-                if(qtyInText && qtyInText > 0){
+                if(qtyInText > 0){
                     if(qtyInText > (p.stock ?? 0)){
                         const assistantMessage = await db.message.create({
                             data: { chatId, role: "assistant", content: `Solo tengo ${p.stock} de ${p.name}. ¿Ajustamos a ${p.stock}?` },
@@ -149,7 +174,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cha
                     data: { chatId, role: "assistant", content: msg },
                     select: { id: true, role: true, content: true, createdAt: true },
                 })
-                return NextResponse.json({ messgae: assistantMessage })
+                return NextResponse.json({ message: assistantMessage })
             }
         } else {
             const idx = parseOrdinalIndex(text)
@@ -169,16 +194,88 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cha
                         data: { chatId, role: "assistant", content: msg },
                         select: { id: true, role: true, content: true, createdAt: true },
                     })
-                    return NextResponse.json({ messgae: assistantMessage })
+                    return NextResponse.json({ message: assistantMessage })
                 }
+            }
+
+            // Auto seleccion por nombre de recordados
+            const narrowed = await searchProductsText({
+                db, botId: bot.id, query: text.trim(), limit: Math.max(remembered.length, 5),
+            })
+            const setRec = new Set(remembered)
+            const inter = narrowed.filter((r) => setRec.has(r.id))
+
+            let chosen = inter.length === 1 ? inter[0] : null
+            if(!chosen && inter.length > 1){
+                const strong = pickStrongTop(inter, normToks)
+                if(strong) chosen = strong
+            }
+            if(!chosen && inter.length > 1){
+                const strict = inter.filter((p) => tokensInText(normToks, p.name) || tokensInText(normToks, p.description ?? null))
+                if(strict.length === 1) chosen = strict[0]
+            }
+            if(chosen){
+                if(wantsAllAvailable(text)){
+                    const want = Math.max(1, chosen.stock)
+                    if(want <= 0){
+                        const assistantMessage = await db.message.create({
+                            data: { chatId, role: "assistant", content: `De ${chosen.name} (SKU ${chosen.sku}) no tengo stock ahora.` },
+                            select: { id: true, role: true, content: true, createdAt: true },
+                        })
+                        return NextResponse.json({ message: assistantMessage })
+                    }
+                    pendingByChat.set(chatId, { step: "await_confirm", productId: chosen.id, sku: chosen.sku, qty: want })
+                    const total = priceStr(chosen.priceCents * want)
+                    const confirm = `Tengo ${want} × ${chosen.name} por $${total}. ¿Confirmas la compra? (responde "sí" o "no")`
+                    const assistantMessage = await db.message.create({
+                        data: { chatId, role: "assistant", content: confirm },
+                        select: { id: true, role: true, content: true, createdAt: true },
+                    })
+                    return NextResponse.json({ message: assistantMessage })
+                }
+
+                if(qtyInText > 0){
+                    if(qtyInText > (chosen.stock ?? 0)){
+                        const assistantMessage = await db.message.create({
+                            data: { chatId, role: "assistant", content: `Solo tengo ${chosen.stock} de ${chosen.name}. ¿Ajustamos a ${chosen.stock}?` },
+                            select: { id: true, role: true, content: true, createdAt: true },
+                        })
+                        return NextResponse.json({ message: assistantMessage })
+                    }
+                    pendingByChat.set(chatId, {
+                        step: "await_confirm", productId: chosen.id, sku: chosen.sku, qty: qtyInText
+                    })
+                    const total = priceStr(chosen.priceCents * qtyInText)
+                    const confirm = `Tengo ${qtyInText} × ${chosen.name} por $${total}. ¿Confirmas la compra? (responde "sí" o "no")`
+                    const assistantMessage = await db.message.create({
+                        data: { chatId, role: "assistant", content: confirm },
+                        select: { id: true, role: true, content: true, createdAt: true },
+                    })
+                    return NextResponse.json({ message: assistantMessage })
+                }
+
+                if(chosen.stock <= 0 ){
+                    const assistantMessage = await db.message.create({
+                        data: { chatId, role: "assistant", content: `De ${chosen.name} (SKU ${chosen.sku}) no tengo stock ahora.` },
+                        select: { id: true, role: true, content: true, createdAt: true },
+                    })
+                    return NextResponse.json({ message: assistantMessage })
+                }
+                pendingByChat.set(chatId, { step: "await_qty", productId: chosen.id, sku: chosen.sku })
+                const msg = `Perfecto, ${chosen.name} (SKU ${chosen.sku}) está a $${priceStr( chosen.priceCents )}. ¿Cuántas unidades necesitas?`
+                const assistantMessage = await db.message.create({
+                    data: { chatId, role: "assistant", content: msg },
+                    select: { id: true, role: true, content: true, createdAt: true },
+                })
+                return NextResponse.json({ message: assistantMessage })
             }
         }
     }
 
     // 1) Conversación pendiente (confirmación/cantidad/stock)
     const pending = pendingByChat.get(chatId) 
-    const yesRe = /(^|\b)(s[ií]|sí|si|claro|dale|va|ok|okay|confirmo|lo\s+compro)\b/i;
-    const stockQRe = /\b(cuantos|cuantas|cuánto|stock|quedan?)\b/i;
+    const yesRe = /(^|\b)(s[ií]|sí|si|claro|dale|va|ok|okay|confirmo|lo\s+compro)\b/i
+    const stockQRe = /\b(cuantos|cuántos|cuantas|cuánta|cuánto|stock|quedan?)\b/i
 
     if (pending) {
       // Preguntar de stock en cualquier estado 
@@ -198,13 +295,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cha
             data: { chatId, role: "assistant", content: msg },
             select: { id: true, role: true, content: true, createdAt: true },
         })
-        return NextResponse.json({ messge: assistantMessage })
+        return NextResponse.json({ message: assistantMessage })
       }
 
       // Estado: esperando cantidad
       if(pending.step === "await_qty"){
-        const qtyInText = parseQuantityFromText(text)
-        if(qtyInText && qtyInText > 0){
+        const qty = parseQuantityFromText(text)
+        if(qty && qty > 0){
             const p = await db.product.findFirst({ where: { id: pending.productId, chatbotId: bot.id } })
             if(!p){
                 pendingByChat.delete(chatId)
@@ -215,7 +312,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cha
                 })
                 return NextResponse.json({ message: assistantMessage })
             }
-            if(qtyInText > (p.stock ?? 0)){
+            if(qty > (p.stock ?? 0)){
                 const assistantMessage = await db.message.create({
                     data: { chatId, role: "assistant", content: `Solo tengo ${p.stock} de ${p.name}. ¿Ajustamos a ${p.stock}?` },
                     select: { id: true, role: true, content: true, createdAt: true },
@@ -228,10 +325,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cha
                 step: "await_confirm",
                 productId: pending.productId,
                 sku: pending.sku,
-                qty: qtyInText,
+                qty,
             })
-            const total = priceStr(p.priceCents * qtyInText)
-            const confirm = `Tengo ${qtyInText} × ${p.name} por $${total}. ¿Confirmas la compra? (responde "sí" o "no")`
+            const total = priceStr(p.priceCents * qty)
+            const confirm = `Tengo ${qty} × ${p.name} por $${total}. ¿Confirmas la compra? (responde "sí" o "no")`
             const assistantMessage = await db.message.create({
                 data: { chatId, role: "assistant", content: confirm },
                 select: { id: true, role: true, content: true, createdAt: true },
@@ -279,16 +376,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cha
         }
 
         // Ajuste de qty al confirmar
-        const qtyInText = parseQuantityFromText(text)
-        if(qtyInText && qtyInText !== pending.qty){
-            if(qtyInText > (p.stock ?? 0)){
+        const changedQty = parseQuantityFromText(text)
+        if(changedQty && changedQty !== pending.qty){
+            if(changedQty > (p.stock ?? 0)){
                 const assistantMessage = await db.message.create({
                     data: { chatId, role: "assistant", content: `Solo tengo ${p.stock}. ¿Ajustamos a ${p.stock}?` },
                     select: { id: true, role: true, content: true, createdAt: true },
                 })
-                return NextResponse.json({ messgae: assistantMessage })
+                return NextResponse.json({ message: assistantMessage })
             }
-            pending.qty = qtyInText
+            pending.qty = changedQty
             pendingByChat.set(chatId, pending)
             const total = priceStr(p.priceCents * pending.qty)
             const msg =  `Quedaría ${pending.qty} × ${p.name} por $${total}. ¿Confirmas? (sí/no)`
@@ -317,13 +414,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cha
             }
 
             const sale = await db.sale.create({
-                data: {
-                    chatbotId: bot.id,
-                    productId: p.id,
-                    qty: want,
-                    status: "pending_payment",
-                    paymentMethod: "cash", 
-                },
+                data: { chatbotId: bot.id, productId: p.id, qty: want, status: "pending_payment", paymentMethod: "cash" },
             })
             await db.inventoryLedger.create({
                 data: { chatbotId: bot.id, productId: p.id, delta: -want, reason: "sale", ref: sale.id },
@@ -401,7 +492,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cha
     }
 
     // 2b) Inventario general
-    if(intent === "ask_inventory"){
+    const intentDetected = intent
+    if(intentDetected === "ask_inventory"){
         const inStock = await db.product.findMany({
             where: { chatbotId: bot.id, stock: { gt: 0 } },
             orderBy: { updatedAt: "desc" },
@@ -419,7 +511,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cha
         // Hay que recordale los candidatos
         setCandidates(chatId, inStock.map((p) => p.id ))
 
-        const msg = `Esto es lo que tengo disponible:\n${listLines(inStock)}\n\nElige por SKU (ej: ${inStock[0].sku})`
+        const msg = `Esto es lo que tengo disponible:\n${listLines(inStock)}\n\nElige por SKU o nombre (ej: ${inStock[0].sku} o "${inStock[0].name}")`
         const assistantMessage = await db.message.create({
             data: { chatId, role: "assistant", content: msg },
             select: { id: true, role: true, content: true, createdAt: true },
@@ -465,11 +557,34 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cha
         }))
     }
 
-    if(intent){
+    if(intentDetected === "buy" && results.length > 0){
+        const strong = pickStrongTop(results, normToks)
+        if(strong && qtyInText > 0){
+            if(qtyInText > (strong.stock ?? 0)){
+                const assistantMessage = await db.message.create({
+                    data: { chatId, role: "assistant", content: `Solo tengo ${strong.stock} de ${strong.name}. ¿Ajustamos a ${strong.stock}?`  },
+                    select: { id: true, role: true, content: true, createdAt: true },
+                })
+                return NextResponse.json({ message: assistantMessage })
+            }
+            setCandidates(chatId, [strong.id])
+            // Directo a confirmacion
+            pendingByChat.set(chatId, { step: "await_confirm", productId: strong.id, sku: strong.sku, qty: qtyInText })
+            const total = priceStr(strong.priceCents * qtyInText )
+            const confirm = `Tengo ${qtyInText} × ${strong.name} por $${total}. ¿Confirmas la compra? (responde "sí" o "no")`
+            const assistantMessage = await db.message.create({ 
+                data: { chatId, role: "assistant", content: confirm },
+                select: { id: true, role: true, content: true, createdAt: true },
+            })
+            return NextResponse.json({ message: assistantMessage })
+        }
+    }
+
+    if(intentDetected){
         if(results.length === 0){
             const assistantMessage = await db.message.create({
                 data: { chatId, role: "assistant", content: "No encontré productos con esa descripción. ¿Tienes el SKU exacto o quieres que te muestre lo que tengo en stock?" },
-                select: { id: true, role: true, content: true, createdAt: true }
+                select: { id: true, role: true, content: true, createdAt: true },
             })
             return NextResponse.json({ message: assistantMessage })
         }
@@ -486,18 +601,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cha
 
             setCandidates(chatId, [p.id])
 
-            if(intent === "ask_price"){
-                const msg = `${p.name} (SKU ${p.sku}) cuesta $${priceStr(p.priceCents)}.`
+            if(intentDetected === "ask_price"){
+                const msg = `${p.name} (SKU ${p.sku}) cuesta $${priceStr( p.priceCents )}.`
                 const assistantMessage = await db.message.create({
                     data: { chatId, role: "assistant", content: msg },
-                    select: { id: true, role: true, content: true, createdAt: true },
+                    select: {id: true, role: true, content: true, createdAt: true }
                 })
                 return NextResponse.json({ message: assistantMessage })
             }
 
-            if(intent === "ask_stock" || intent === "ask_availability"){
+            if(intentDetected === "ask_stock" || intentDetected === "ask_availability"){
                 const disp = p.stock > 0 ? `Sí, tengo ${p.stock} disponibles` : "No, está agotado"
-                const msg = `${disp} de ${p.name} (SKU ${p.sku}). Precio: $${priceStr(p.priceCents)}.`
+                const msg = `${disp} de ${p.name} (SKU ${p.sku}). Precio: $${priceStr( p.priceCents )}.`
                 const assistantMessage = await db.message.create({
                     data: { chatId, role: "assistant", content: msg },
                     select: { id: true, role: true, content: true, createdAt: true },
@@ -505,9 +620,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cha
                 return NextResponse.json({ message: assistantMessage })
             }
 
-            if(intent === "buy"){
+            if(intentDetected === "buy"){
                 pendingByChat.set(chatId, { step: "await_qty", productId: p.id, sku: p.sku })
-                const msg = `Perfecto, ${p.name} (SKU ${p.sku}) está a $${priceStr(p.priceCents)}. ¿Cuántas unidades necesitas?`
+                const msg = `Perfecto, ${p.name} (SKU ${p.sku}) está a $${priceStr( p.priceCents )}. ¿Cuántas unidades necesitas?`
                 const assistantMessage = await db.message.create({
                     data: { chatId, role: "assistant", content: msg },
                     select: { id: true, role: true, content: true, createdAt: true },
@@ -516,10 +631,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cha
             }
         }
 
-        // Varias coincidencias -> recordamos candidatos
-        setCandidates(chatId, results.map((p) => p.id ))
-        const nice = results.map((p) => `• ${p.sku} — ${p.name} — $${priceStr(p.priceCents)} — stock ${p.stock}` ).join("\n")
-        const msg = `Encontré varias opciones:\n${nice}\n\nElige por SKU (ej: ${results[0].sku})${intent === "buy" ? " y dime cuántas" : ""}.`
+        setCandidates( chatId, results.map((p) => p.id))
+        const nice = results.map((p) => `• ${p.sku} — ${p.name} — $${priceStr(p.priceCents)} — stock ${ p.stock }`).join("\n")
+        const msg = `Encontré varias opciones:\n${nice}\n\nElige por **SKU o nombre exacto** (ej: ${ results[0].sku } o "${results[0].name}")${ intentDetected === "buy" ? " y dime cuántas" : "" }.`
         const assistantMessage = await db.message.create({
             data: { chatId, role: "assistant", content: msg },
             select: { id: true, role: true, content: true, createdAt: true },
