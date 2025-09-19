@@ -6,7 +6,7 @@ import type { ToolContext } from "./types"
 import { searchProductsText } from "@/lib/textSearch"
 
 export const productsSearchTool: Tool<z.ZodObject<any>> = {
-    name: "product.search",
+    name: "product_search",
     description: "Búsqueda por texto usando índice $text (name/description/sku) con relevancia. Retorna top-N.",
     inputSchema: z.object({
         query: z.string().min(2),
@@ -41,7 +41,7 @@ export const productsSearchTool: Tool<z.ZodObject<any>> = {
             return {
                 items: safe.map((p) => ({
                     id: String(p.id),
-                    sku: p.name,
+                    sku: p.sku,
                     name: p.name,
                     description: p.description ?? null,
                     priceCents: p.priceCents,

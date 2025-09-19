@@ -22,11 +22,17 @@ function toOpenAIParams(schema: ZodTypeAny, name: string){
 }
 
 export function getOpenAIFunctions(){
-    return tools.map((t) => ({
-        name: t.name,
-        description: t.description,
-        parameters: toOpenAIParams(t.inputSchema, t.name),
-    }))
+    const INVALID = /[^A-Za-z0-9_-]/
+    return tools.map((t) => {
+        if(INVALID.test(t.name)){
+            throw new Error(`Invalid tool name "${t.name}". Use only letters, numbers, "-" and "_".`)
+        }
+        return {
+            name: t.name,
+            description: t.description,
+            parameters: toOpenAIParams(t.inputSchema, t.name),
+        }
+    })
 }
 
 export async function dispatchToolCall(name: string, args: unknown, ctx: any){
