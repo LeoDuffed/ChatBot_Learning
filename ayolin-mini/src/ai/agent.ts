@@ -21,7 +21,7 @@ REGLAS ESTRICTAS:
 
 Si el usuario hace preguntas de charla general (no productos), puedes responder normalmente,
 pero si la pregunta toca el catálogo, debes invocar tools.
-`
+` // Este system prompt lo tiene que editar cada persona, pero las reglas estrictas se mantienen
 
 export async function runMiniAyolinTurn({
     userMessage,
