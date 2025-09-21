@@ -9,6 +9,7 @@ import {
     detectIntent, 
     parseQuantityFromText,
     singularizeBasic, 
+    hasBrowserIntent,
 } from "@/lib/textQuery" 
 import { runMiniAyolinTurn } from "@/ai/agent" 
 import { searchProductsText } from "@/lib/textSearch"
@@ -47,9 +48,10 @@ function listLines(products: { sku: string;  name: string;  priceCents: number; 
 // Negativas "limpias"
 function isCleanNegative(normalize: string){
     const t = normalize.trim()
-    if (/^(no|no\s+gracias)[.!]?$/.test(t)) return true
-    if (/^(mejor\s+no|ya\s+no|olvidalo|olvídalo)[.!]?$/.test(t)) return true
-    if (/\b(cancela|cancelar|cancela\s+pedido|cancelar\s+pedido)\b/.test(t)) return true
+    // aceptamos negativas comunes en cualquier parte de la frase
+    if (/\b(no\s+gracias|no\s+quiero(\s+nada)?|no\s+lo\s+quiero|mejor\s+no|ya\s+no|olvidalo|olvídalo)\b/.test(t)) return true
+    if (/^(no)[.!]?$/.test(t)) return true
+    if (/\b(cancela(r)?(\s+pedido)?)\b/.test(t)) return true
     return false
 }
 
@@ -91,6 +93,31 @@ function pickStrongTop<T extends { name: string; description?: string | null; sc
     if(nameCovers || scoreClear) return top
     return null
 }
+
+async function showInventoryAndRemember(chatId: string, botId: string ){
+    const inStock = await db.product.findMany({
+        where: { chatbotId: botId, stock: { gt: 0 } },
+        orderBy: { updatedAt: "desc" },
+        take: 8,
+    })
+
+    if(inStock.length === 0){
+        const assistantMessage = await db.message.create({
+            data: { chatId, role: "assistant", content: "Ahora mismo no tengo productos en stock. Si tienes un SKU o nombre específico, lo busco." },
+            select: { id: true, role: true, content: true, createdAt: true }
+        })
+        return NextResponse.json({ message: assistantMessage })
+    }
+
+    setCandidates(chatId, inStock.map((p) => p.id))
+    const msg = `Esto es lo que tengo disponible:\n${listLines(inStock)}\n\nElige por SKU o nombre (ej: ${inStock[0].sku} o "${inStock[0].name}")`
+    const assistantMessage = await db.message.create({
+        data: { chatId, role: "assistant", content: msg },
+        select: { id: true, role: true, content: true, createdAt: true }
+    })
+    return NextResponse.json({ message: assistantMessage })
+}
+
 export const runtime = "nodejs" 
 export const dynamic = "force-dynamic" 
 
@@ -278,6 +305,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cha
     const stockQRe = /\b(cuantos|cuántos|cuantas|cuánta|cuánto|stock|quedan?)\b/i
 
     if (pending) {
+      // Si el usuario cambia a "browse intent, tenemos que resetear"  
+      if(hasBrowserIntent(text)){
+        pendingByChat.delete(chatId)
+        clearCandidates(chatId)
+        return await showInventoryAndRemember(chatId, bot.id)
+      }
+
       // Preguntar de stock en cualquier estado 
       if(stockQRe.test(text)){
         const p = await db.product.findFirst({ where: { id: pending.productId, chatbotId: bot.id } })

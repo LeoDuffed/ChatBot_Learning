@@ -61,30 +61,32 @@ export function detectIntent(text: string): Intent {
   const t = normalize(text)  
 
   if (/\b(quiero|comprar|compra|me\s+lo\s+llevo|me\s+llevo|agrega|añade|sumar)\b/.test(t)) {
-    return "buy"  
+    return "buy" 
   }
 
   // + artículos, productos, vendes, manejas…
-  if (
-    /\b(que\s+tienes|qué\s+tienes|que\s+vendes|que\s+productos|qué\s+productos|articulos|artículos|productos|catalogo|catálogo|muestrame|muéstrame|muestra|muestras|mostrar|ensename|enséñame|ver\s+inventario|ver\s+stock|manejas|maneja)\b/.test(
-      t
-    )
-  ) {
-    return "ask_inventory"  
+  if (/\b(que\s+tienes|qué\s+tienes|que\s+vendes|que\s+productos|qué\s+productos|produtos|articulos|artículos|productos|catalogo|catálogo|muestrame|muéstrame|muestra\s*me|muestra|muestras|mostrar|ensename|enséñame|ver\s+inventario|ver\s+stock|ver\s+productos|manejas|maneja)\b/.test(t)) {
+    return "ask_inventory"
   }
 
   if (/\b(tienes|hay|manejas|vendes|disponible|disponibles|stock)\b/.test(t)) {
-    if (/\b(precio|cuanto\s+cuesta|cuánto\s+cuesta|vale|coste)\b/.test(t)) return "ask_price"  
-    if (/\b(cuantos|cuantas|cuánto|cuantos\s+te\s+quedan|stock|quedan?)\b/.test(t)) return "ask_stock"  
-    return "ask_availability"  
+    if (/\b(precio|cuanto\s+cuesta|cuánto\s+cuesta|vale|coste)\b/.test(t)) return "ask_price"
+    if (/\b(cuantos|cuantas|cuánto|cuantos\s+te\s+quedan|stock|quedan?)\b/.test(t)) return "ask_stock"
+    return "ask_availability"
   }
 
-  if (/\b(precio|cuanto\s+cuesta|cuánto\s+cuesta|vale|coste)\b/.test(t)) return "ask_price"  
+  if (/\b(precio|cuanto\s+cuesta|cuánto\s+cuesta|vale|coste)\b/.test(t)) return "ask_price"
 
-  return null  
+  return null
 }
 
 export function extractSkuFromText(text: string): string | null {
   const m = text.match(/\bsku\b[^A-Za-z0-9._-]*([A-Za-z0-9._-]{2,})/i)  
   return m?.[1]?.toUpperCase() ?? null  
+}
+
+export function hasBrowserIntent(text: string): boolean{
+  const t = normalize(text)
+
+  return /\b(muestrame|muéstrame|muestra\s*me|mostrar|ensename|enséñame|ver\s+(inventario|productos|stock)|catalogo|catálogo|que\s+tienes|qué\s+tienes|que\s+vendes|produtos|productos?)\b/.test(t)
 }
