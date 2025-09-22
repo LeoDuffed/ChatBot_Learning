@@ -71,6 +71,11 @@ model Chatbot {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
+  // configuración de checkout por bot
+  paymentMethods String[] @default([])
+  shippingMethods String[] @default([])
+  shippingConfig  Json?
+
   // Relaciones
   products        Product[]
   sales           Sale[]
@@ -138,6 +143,12 @@ model Sale {
   status        SaleStatus @default(pending_payment)
   paymentMethod String? // "cash" | "card" | "transfer" | etc.
   customerRef   String? // id/teléfono/chatId del cliente si lo deseas
+
+  // datos de checkout 
+  customerName   String?
+  shippingMethod String?
+  shippingDetails Json?
+  totalCents     Int?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
