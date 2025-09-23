@@ -29,7 +29,7 @@ type BotSettings = {
   } | null
 }
 
-const ALL_PAYMENT_METHODS = ["chash", "transfer", "card"] as const
+const ALL_PAYMENT_METHODS = ["cash", "transfer", "card"] as const
 const ALL_SHIPPING_METHODS = ["domicilio", "punto_medio", "recoleccion"] as const
 
 export default function ChatPage(){
@@ -43,7 +43,7 @@ export default function ChatPage(){
   const [adminPw, setAdminPw] = useState("")
   const [prodForm, setProdForm] = useState({ sku:"", name:"", priceCents:"", stock:""})
   const [intentForm, setIntentForm] = useState({ sku:"", qty: "" })
-  const [BotSettings, setBotSettings] = useState<BotSettings | null>(null)
+  const [, setBotSettings] = useState<BotSettings | null>(null)
   const [paySelection, setPaySelection] = useState<string[]>([])
   const [shipSelection, setShipSelection] = useState<string[]>([])
   const [pickupAddress, setPickupAddress] = useState<string>("")
@@ -84,7 +84,7 @@ export default function ChatPage(){
   }
 
   // Cargar chats al abrir
-  useEffect(() => {loadChats() }, [])
+  useEffect(() => {loadChats(); loadBotSettings(); }, [])
 
   // Si no hay chat activo, seleccionamos el primero
   useEffect(() => {
@@ -213,7 +213,7 @@ export default function ChatPage(){
     const config = {
       pickupAddress: pickupAddress || null,
       pickupHours: pickupHours || null,
-      meetupAreas: meetupAreasText.split(", ").map(s => s.trim()).filter(Boolean)
+      meetupAreas: meetupAreasText.split(",").map(s => s.trim()).filter(Boolean)
     }
     const r = await fetch("/api/my-bot/settings/shipping-methods", {
       method: "PUT",
@@ -248,7 +248,7 @@ export default function ChatPage(){
                     {ALL_PAYMENT_METHODS.map((m) => (
                       <label key={m} className="flex items-center gap-2 text-sm">
                         <input type="checkbox" checked={paySelection.includes(m)} onChange={() => setPaySelection(prev => toggleInSelection(prev, m))}/>
-                        <span className="capitalize">{m === "chash" ? "efectivo" : m === "transfer" ? "transferencia" : "tarjeta"} </span>
+                        <span className="capitalize">{m === "cash" ? "efectivo" : m === "transfer" ? "transferencia" : "tarjeta"} </span>
                       </label>
                     ))}
                   </div>
@@ -427,7 +427,7 @@ export default function ChatPage(){
                             size="sm"
                             className="bg-emerald-600 text-black hover:bg-emerald-500"
                             onClick={async() => {
-                              const r = await fetch(`api/sales/${s.id}/mark-paid`, {
+                              const r = await fetch(`/api/sales/${s.id}/mark-paid`, {
                                 method: "POST",
                                 headers: {"Content-Type":"application/json"},
                                 body: JSON.stringify({ password: adminPw }),
