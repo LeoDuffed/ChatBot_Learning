@@ -64,17 +64,18 @@ enum SaleStatus {
  */
 model Chatbot {
   id            String   @id @default(auto()) @map("_id") @db.ObjectId
-  ownerUserId   String // id del usuario dueño (string desde tu auth actual)
+  ownerUserId   String
   name          String
   salesEnabled  Boolean  @default(true)
-  salesPassHash String? // hash scrypt de la contraseña del “jefe”
+  salesPassHash String?
+
+  // === NUEVO ===
+  paymentMethods String[]        @default([])
+  shippingMethods String[]       @default([])
+  shippingConfig  Json?
+
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
-
-  // configuración de checkout por bot
-  paymentMethods String[] @default([])
-  shippingMethods String[] @default([])
-  shippingConfig  Json?
 
   // Relaciones
   products        Product[]
@@ -114,7 +115,7 @@ model Product {
   sku         String
   name        String
   description String?
-  priceCents  Int // precio en centavos
+  priceCents  Int
   stock       Int     @default(0)
 
   createdAt DateTime @default(now())
@@ -141,14 +142,13 @@ model Sale {
 
   qty           Int
   status        SaleStatus @default(pending_payment)
-  paymentMethod String? // "cash" | "card" | "transfer" | etc.
-  customerRef   String? // id/teléfono/chatId del cliente si lo deseas
-
-  // datos de checkout 
+  paymentMethod String?
+  customerRef   String?
+  // === NUEVO ===
   customerName   String?
   shippingMethod String?
   shippingDetails Json?
-  totalCents     Int?
+  totalCents      Int?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
