@@ -274,6 +274,7 @@ export default function ChatPage(){
 
                     {/* Config extras */}
                     <div className="mt-3 space-y-2">
+                      <div className="text-xs opacity-75">Direccion de recolecion</div>
                       <Input
                         placeholder="Ej. Av. Siempre Viva 123"
                         value={pickupAddress}
