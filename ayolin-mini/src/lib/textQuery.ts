@@ -55,6 +55,8 @@ export type Intent =
   | "ask_availability"
   | "ask_stock"
   | "ask_price"
+  | "ask_payment_methods"
+  | "ask_shipping_methods"
   | null  
 
 export function detectIntent(text: string): Intent {
@@ -77,6 +79,14 @@ export function detectIntent(text: string): Intent {
 
   if (/\b(precio|cuanto\s+cuesta|cuánto\s+cuesta|vale|coste)\b/.test(t)) return "ask_price"
 
+  if (
+    /\b(metodos?\s+de\s+pago|formas?\s+de\s+pago|como\s+puedo\s+pagar|aceptan\s+(tarjeta|efectivo|transferencia|spei)|pago\s+con)\b/.test(t)
+  ) return "ask_payment_methods"
+
+  if (
+    /\b(metodos?\s+de\s+(envio|entrega)|como\s+(entregan|envian)|envio\s+a\s+domicilio|recoleccion|punto\s+medio|pickup)\b/.test(t)
+  ) return "ask_shipping_methods"
+
   return null
 }
 
@@ -89,4 +99,91 @@ export function hasBrowserIntent(text: string): boolean{
   const t = normalize(text)
 
   return /\b(muestrame|muéstrame|muestra\s*me|mostrar|ensename|enséñame|ver\s+(inventario|productos|stock)|catalogo|catálogo|que\s+tienes|qué\s+tienes|que\s+vendes|produtos|productos?)\b/.test(t)
+}
+
+function levenshtein(a: string, b: string): number {
+  const m = a.length, n = b.length
+  if(m === 0) return n
+  if(n === 0) return m
+  
+  const dp = new Array(n+1)
+  for(let j = 0; j <= n; j++) dp[j] = j
+
+  for (let i = 1; i<=m; i++){
+    let prev = i - 1
+    dp[0] = i
+    for(let j = 1; j <= n; j++){
+      const tmp = dp[j]
+      const cost = a[i -1] === b[j - 1] ? 0 : 1
+      dp[j] = Math.min( dp[j] + 1, dp[j - 1] + 1, prev + cost)
+      prev = tmp
+    }
+  }
+  return dp[n]
+}
+
+function tokenizeSimple(s: string): string[]{
+  return s.split(/\s+/).map((x) => x.trim()).filter(Boolean)
+}
+
+// Devuelbe un numero del 0 al 1
+function jaccardSimilarity(a: string, b: string): number{
+  const A = new Set(tokenizeSimple(a))
+  const B = new Set(tokenizeSimple(b))
+
+  if(A.size === 0 && B.size === 0) return 1
+  let inter = 0
+  for(const x of A) if(B.has(x)) inter++
+  const union = A.size + B.size - inter
+  return union === 0 ? 0 : inter / union
+}
+
+// Elige la mejor opcion de 'options' que "parezca" lo que escribio el usuario
+export function fuzzyPick(options: string[], input: string): string | null{
+  if(!Array.isArray(options) || options.length === 0) return null
+  const needle = normalize(input).trim()
+  if(!needle) return null
+  
+  let bestIdx = -1
+  let bestScore = 0
+
+  for(let i = 0; i < options.length; i++){
+    const rawOpt = String(options[i] ?? "")
+    if(!rawOpt) continue
+
+    const opt = normalize(rawOpt).trim()
+    if(!opt) continue
+
+    // Igualdad exacta (1.0)
+    if(opt === needle){
+      bestIdx = i
+      bestScore = 1
+      break
+    }
+
+    // Inclusion / prefijo (0.9 o 0.85)
+    let score = 0
+    if(opt.includes(needle) || needle.includes(opt)) score = Math.max(score, 0.9)
+    if(opt.startsWith(needle) || needle.startsWith(opt)) score = Math.max(score, 0.85)
+
+    // Similaridad Jaccard por tokens
+    score = Math.max(score, jaccardSimilarity(opt, needle) * 0.9)
+
+    // Similaridad por Levenshtein normalizada
+    const maxLen = Math.max(opt.length, needle.length)
+    if(maxLen > 0){
+      const dist = levenshtein(opt, needle)
+      const sim = 1 - dist / maxLen
+      // le damos un peso medio 
+      score = Math.max(score, sim * 0.8)
+    }
+
+    if(score > bestScore){
+      bestScore = score
+      bestIdx = i
+    }
+  }
+
+  // Umbral razonable para español corto 
+  return bestScore >= 0.6 && bestIdx >= 0 ? options[bestIdx] : null
 }

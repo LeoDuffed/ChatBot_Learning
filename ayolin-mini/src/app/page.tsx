@@ -2,12 +2,13 @@
 
 'use client'
 
-import { 
+import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
-  useState, 
-  useCallback,
+  useState,
+  type FormEvent,
 } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -134,7 +135,7 @@ export default function ChatPage(){
     })
   }
 
-  async function send(e: React.FormEvent){
+  async function send(e: FormEvent<HTMLFormElement>){
     e.preventDefault()
     if(!input.trim()) return 
     setLoading(true)
