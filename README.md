@@ -27,59 +27,6 @@ Versión mínima del chatbot de **AYOLIN** para probar la experiencia básica de
 
 ---
 
-## 🗄️ Modelo de datos (Prisma)
-
-`prisma/schema.prisma` (MongoDB):
-
-```prisma
-generator client {
-  provider = "prisma-client-js"
-}
-
-datasource db {
-  provider = "mongodb"
-  url      = env("DATABASE_URL")
-}
-
-model Product {
-  id          String  @id @default(auto()) @map("_id") @db.ObjectId
-  sku         String  @unique
-  name        String
-  price       Decimal @db.Decimal(10,2)
-  stock       Int
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-}
-
-model Chat {
-  id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  title     String?
-  createdAt DateTime @default(now())
-  messages  Message[]
-}
-
-model Message {
-  id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  chatId    String   @db.ObjectId
-  role      String   // 'user' | 'assistant'
-  content   String
-  createdAt DateTime @default(now())
-
-  @@index([chatId])
-}
-
-model Reservation {
-  id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  sku       String
-  quantity  Int
-  chatId    String   @db.ObjectId
-  status    String   // 'held' | 'confirmed' | 'released'
-  createdAt DateTime @default(now())
-}
-```
-
----
-
 ## 🚀 Puesta en marcha
 
 Con **pnpm** (recomendado) o **npm**.
@@ -105,11 +52,11 @@ npm run dev
 
 ## 🧠 Lógica del mini-bot (reglas simples)
 
-- Si el usuario envía un **SKU válido**, responde con: nombre, precio y stock.
+- Si el usuario envía un **SKU válido o nombre de producto**, responde con: nombre, precio y stock.
 - Si pregunta **“¿cuántos tienes?”** y ya hay SKU en contexto: devuelve stock.
 - Si dice **“aparta X”** o **“quiero X”** y hay stock: crea `Reservation` (status `held`) y reduce stock temporal.
 - Si el usuario **cambia de SKU**, el contexto se actualiza.
-- Palabras clave: `sku`, `disponibilidad`, `cuántos`, `precio`, `aparta`, `quiero`, `compra`.
+- Si el usuario pregunta por **métodos de pago y entrega**, el chatbot responde con base en lo que selecciona el "vendedor".
 
 ---
 
@@ -131,12 +78,15 @@ npm run dev
 
 ## 🧪 Pruebas rápidas (manual)
 
+- **Súper importante → necesitas agregar un producto primero en la base de datos.**
+
 1. Escribe: “**Hola**”.
-2. Pregunta: “**¿tienes disponibles pantalones negros?**”.
-3. Envía: “**sku A01B23**”.
+2. Pregunta: “**¿tienes disponibles pantalones negros?**”, “**¿Qué métodos de pago tienes?**”, “**¿Qué métodos de entrega hay disponibles?**”.
+3. Envía: “**sku A01B23**” o “**nombre del producto**”.
 4. Pregunta: “**¿cuántos tienes?**” → debería responder stock.
 5. Envía: “**quiero 2**” → crea `Reservation (held)` y descuenta stock.
-6. Cambia a otro SKU y repite.
+6. Confirma: “**Al confirmar la compra baja el stock y pregunta por datos para su entrega y métodos de pago**”.
+7. Cambia a otro SKU y repite las veces que quieras.
 
 ---
 
