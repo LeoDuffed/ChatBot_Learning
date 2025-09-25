@@ -27,6 +27,7 @@ type BotSettings = {
     pickupAddress?: string | null
     pickupHours?: string | null
     meetupAreas?: string[] | null
+    sellerContact?: string | null
   } | null
 }
 
@@ -50,6 +51,7 @@ export default function ChatPage(){
   const [pickupAddress, setPickupAddress] = useState<string>("")
   const [pickupHours, setPickupHours] = useState<string>("")
   const [meetupAreasText, setMeetupAreasText] = useState<string>("")
+  const [sellerContact, setSellerContact] = useState<string>("")
 
   // Auto scroll 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth'}) }, [messages])
@@ -82,6 +84,7 @@ export default function ChatPage(){
     setPickupAddress(b.shippingConfig?.pickupAddress ?? "")
     setPickupHours(b.shippingConfig?.pickupHours ?? "")
     setMeetupAreasText((b.shippingConfig?.meetupAreas ?? []).join(", "))
+    setSellerContact(b.shippingConfig?.sellerContact ?? "")
   }
 
   // Cargar chats al abrir
@@ -214,7 +217,8 @@ export default function ChatPage(){
     const config = {
       pickupAddress: pickupAddress || null,
       pickupHours: pickupHours || null,
-      meetupAreas: meetupAreasText.split(",").map(s => s.trim()).filter(Boolean)
+      meetupAreas: meetupAreasText.split(",").map(s => s.trim()).filter(Boolean),
+      sellerContact: sellerContact || null,
     }
     const r = await fetch("/api/my-bot/settings/shipping-methods", {
       method: "PUT",
@@ -276,6 +280,12 @@ export default function ChatPage(){
                     {/* Config extras */}
                     <div className="mt-3 space-y-2">
                       <div className="text-xs opacity-75">Direccion de recolecion</div>
+                      <Input
+                        placeholder="Ej. +52 55 1234 5678, @usuario, correo@dominio.com"
+                        value={sellerContact}
+                        onChange={(e) => setSellerContact(e.target.value)}
+                        className="bg-neutral-800 border-neutral-700 text-white"
+                      />
                       <Input
                         placeholder="Ej. Av. Siempre Viva 123"
                         value={pickupAddress}

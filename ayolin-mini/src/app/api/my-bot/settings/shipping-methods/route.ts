@@ -32,6 +32,9 @@ export async function PUT(req: NextRequest){
             const areas = cfg.meetupAreas.map((s: any) => String(s || "").trim()).filter((s: any) => s.length > 0)
             if(areas.length) shippingConfig.meetupAreas = areas
         }
+        if(typeof cfg.sellerContact === "string" && cfg.sellerContact.trim()){
+            shippingConfig.sellerContact = cfg.sellerContact.trim()
+        }
 
         const update = await db.chatbot.update({
             where: { id: bot.id },
