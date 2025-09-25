@@ -162,12 +162,73 @@ function formatShippingOptions(shipping: string[], cfg: any): string{
     return parts.join("\n")
 }
 
+type ShippingKind = "domicilio" | "punto_medio" | "recoleccion"
+
+function normalizeShippingString(value?: string | null): string{
+    if(!value) return ""
+    return value.trim().toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ")
+}
+
+function detectShippingKind(value?: string | null): ShippingKind | null{
+    if(!value) return null
+    return methodFromText(value) ?? methodFromText(value.replace(/[_-]+/g, " "))
+}
+
+function resolveShippingOption(options: string[], candidate?: string | null): string | null{
+    if(!candidate) return null
+    for(const option of options){
+        if(!option) continue
+        if(option === candidate) return option
+        const optionNorm = normalizeShippingString(option)
+        const candidateNorm = normalizeShippingString(candidate)
+        if(optionNorm && optionNorm === candidateNorm) return option
+        const optionKind = detectShippingKind(option)
+        const candidateKind = detectShippingKind(candidate)
+        if(optionKind && optionKind === candidateKind) return option
+    }
+    return null
+}
+
+function canonicalizeShipping(raw?: string | null): { method: string; kind: ShippingKind | null }{
+    if(!raw) return { method: "", kind: null }
+    const kind = detectShippingKind(raw)
+    if(kind) return { method: kind, kind }
+    const normalized = normalizeShippingString(raw)
+    return { method: normalized.slice(0, 60), kind: null }
+}
+
+function humanizeShippingMethod(method?: string | null): string{
+    const kind = detectShippingKind(method)
+    if(kind === "domicilio") return "Envío a domicilio"
+    if(kind === "punto_medio") return "Punto medio"
+    if(kind === "recoleccion") return "Recolección"
+    if(!method) return "Entrega"
+    const cleaned = method.replace(/[_-]+/g, " ").trim()
+    if(!cleaned) return "Entrega"
+    return cleaned
+        .split(/\s+/)
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+        .join(" ")
+}
+
+function shippingDetailLabel(kind: ShippingKind | null): string{
+    if(kind === "domicilio") return "Dirección"
+    if(kind === "punto_medio") return "Punto"
+    return "Detalle"
+}
+
+function pickupHint(cfg: any): string{
+    const addr = cfg?.pickupAddress ? ` en ${cfg.pickupAddress}` : ""
+    const hours = cfg?.pickupHours ? ` (${cfg.pickupHours})` : ""
+    return addr || hours ? `\nRetiro${addr}${hours}.` : ""
+}
+
 export const runtime = "nodejs" 
 export const dynamic = "force-dynamic" 
 
-export async function POST(req: NextRequest, { params }: { params: { chatId: string } }) {
+export async function POST(req: NextRequest, context: { params: Promise<{ chatId: string }> }) {
   try {
-    const { chatId } = params 
+    const { chatId } = await context.params 
     const { text } = (await req.json()) as { text: string } 
 
     if (!text || !text.trim()) {
@@ -215,7 +276,7 @@ export async function POST(req: NextRequest, { params }: { params: { chatId: str
                 data: { chatId, role: "assistant", content: "Por ahora no tengo métodos de envío/entrega configurados." },
                 select: { id: true, role: true, content: true, createdAt: true }
             })
-            return NextResponse.json({ messages: assistantMessage })
+            return NextResponse.json({ message: assistantMessage })
         }
         const partsMsg = formatShippingOptions(shipping, cfg)
         const msg = `Opciones de envío/entrega:\n${partsMsg}`
@@ -243,35 +304,48 @@ export async function POST(req: NextRequest, { params }: { params: { chatId: str
             return NextResponse.json({ message: assistantMessage })
         }
 
-        // Menciono un metodo explicito?
-        const methodHint = methodFromText(text) || (fuzzyPick(shipping, text) as any)
-        if(methodHint && shipping.includes(methodHint)){
-            if(methodHint === "recoleccion"){
-                // Confirmacion directa (no necesita detalles)
-                pendingByChat.set(chatId, { step: "chg_final_confirm", saleId: openSale.id, shippingMethod: "recoleccion" })
-                const addr = cfg?.pickupAddress ? ` en ${cfg.pickupAddress}` : ""
-                const hours = cfg?.pickupHours  ? ` (${cfg.pickupHours})` : ""
-                const hint = addr || hours ? `\nRetiro${addr}${hours}.` : ""
-                const guide = `Perfecto, cambiamos a **recolección**.${hint}\n¿Confirmas el cambio? (sí/no)`
+        // Intento de selección directa de método
+        const fuzzyMatch = fuzzyPick(shipping, text)
+        const resolvedFromIntent = methodFromText(text)
+        const matchedOption = fuzzyMatch ?? resolveShippingOption(shipping, resolvedFromIntent)
+
+        if(matchedOption){
+            const { method: canonicalMethod, kind } = canonicalizeShipping(matchedOption)
+
+            if(kind === "recoleccion"){
+                // Confirmación directa (no necesita detalles)
+                pendingByChat.set(chatId, { step: "chg_final_confirm", saleId: openSale.id, shippingMethod: canonicalMethod })
+                const hint = pickupHint(cfg)
+                const guide = `Perfecto, cambiamos a **${humanizeShippingMethod(canonicalMethod)}**.${hint}\n¿Confirmas el cambio? (sí/no)`
                 const assistantMessage = await db.message.create({
                     data: { chatId, role: "assistant", content: guide },
                     select: { id: true, role: true, content: true, createdAt: true }
                 })
                 return NextResponse.json({ message: assistantMessage })
-            } else if (methodHint === "domicilio" || methodHint === "punto_medio"){
-                // Pedimos detalles
-                pendingByChat.set(chatId, { step: "chg_shipping_details", saleId: openSale.id, shippingMethod: methodHint })
+            }
+
+            if(kind === "domicilio" || kind === "punto_medio"){
+                // Pedimos detalles específicos del método
+                pendingByChat.set(chatId, { step: "chg_shipping_details", saleId: openSale.id, shippingMethod: canonicalMethod })
                 let ask = "Compárteme la dirección de entrega y una referencia."
-                if(methodHint === "punto_medio"){
-                    const zones = Array.isArray(cfg?.meetupAreas) && cfg.meetupAreas.length ? ` Zonas sugeridas: ${cfg.meetupAreas.join(", ")}` : ""
-                    ask = `¿En qué punto medio nos vemos?${zones ? `\n${zones}\n` : " "}Puedes elegir una zona sugerida`
+                if(kind === "punto_medio"){
+                    const zones = Array.isArray(cfg?.meetupAreas) && cfg.meetupAreas.length ? `\nZonas sugeridas: ${cfg.meetupAreas.join(", ")}` : ""
+                    ask = `¿En qué punto medio nos vemos?${zones ? `${zones}\n` : " "}Puedes elegir una de las zonas sugeridas o proponer otra.`
                 }
                 const assistantMessage = await db.message.create({
-                    data: { chatId, role: "assistant", content: ask },
+                    data: { chatId, role: "assistant", content: ask.trim() },
                     select: { id: true, role: true, content: true, createdAt: true }
                 })
                 return NextResponse.json({ message: assistantMessage })
             }
+
+            // Métodos no catalogados: pedimos detalle genérico
+            pendingByChat.set(chatId, { step: "chg_shipping_details", saleId: openSale.id, shippingMethod: canonicalMethod })
+            const assistantMessage = await db.message.create({
+                data: { chatId, role: "assistant", content: "Compárteme los detalles para la entrega (dirección, referencias, etc.)." },
+                select: { id: true, role: true, content: true, createdAt: true }
+            })
+            return NextResponse.json({ message: assistantMessage })
         }
 
         // Si no especifico metodo -> mostramos las opciones 
@@ -511,8 +585,11 @@ export async function POST(req: NextRequest, { params }: { params: { chatId: str
             return NextResponse.json({ message: assistantMessage })
         }
 
-        const pick = (fuzzyPick(shipping, text) as any) || methodFromText(text)
-        if(!pick || !shipping.includes(pick)){
+        const fuzzyMatch = fuzzyPick(shipping, text)
+        const resolvedFromIntent = methodFromText(text)
+        const matchedOption = fuzzyMatch ?? resolveShippingOption(shipping, resolvedFromIntent)
+
+        if(!matchedOption){
             const partsMsg = formatShippingOptions(shipping, cfg)
             const msg =  `No entendí la opción. ¿Cuál eliges?\n${partsMsg}`
             const assistantMessage = await db.message.create({
@@ -522,12 +599,11 @@ export async function POST(req: NextRequest, { params }: { params: { chatId: str
             return NextResponse.json({ message: assistantMessage })
         }
 
-        if(pick === "recoleccion"){
-            pendingByChat.set(chatId, { step: "chg_final_confirm", saleId: sale.id, shippingMethod: "recoleccion"})
-            const addr = cfg?.pickupAddress ? ` en ${cfg.pickupAddress}` : ""
-            const hours = cfg?.pickupHours ? ` (${cfg.pickupHours})` : ""
-            const hint = addr || hours ? `\nRetiro${addr}${hours}.` : ""
-            const guide = `Perfecto, cambiamos a **recolección**.${hint}\n¿Confirmas el cambio? (sí/no)`
+        const { method: canonicalMethod, kind } = canonicalizeShipping(matchedOption)
+
+        if(kind === "recoleccion"){
+            pendingByChat.set(chatId, { step: "chg_final_confirm", saleId: sale.id, shippingMethod: canonicalMethod })
+            const guide = `Perfecto, cambiamos a **${humanizeShippingMethod(canonicalMethod)}**.${pickupHint(cfg)}\n¿Confirmas el cambio? (sí/no)`
             const assistantMessage = await db.message.create({
                 data: { chatId, role: "assistant", content: guide },
                 select: { id: true, role: true, content: true, createdAt: true }
@@ -535,15 +611,16 @@ export async function POST(req: NextRequest, { params }: { params: { chatId: str
             return NextResponse.json({ message: assistantMessage })
         }
 
-        // Si es domicilio o pubto medio, hay que pedir detalles
-        pendingByChat.set(chatId, { step: "chg_shipping_details", saleId: sale.id, shippingMethod: pick })
+        pendingByChat.set(chatId, { step: "chg_shipping_details", saleId: sale.id, shippingMethod: canonicalMethod })
         let ask = "Compárteme la dirección de entrega y una referencia."
-        if(pick === "punto_medio"){
-            const zones = Array.isArray(cfg?.meetupAreas) && cfg.meetupAreas.length ? ` Zonas sugeridas: ${cfg.meetupAreas.join(", ")}` : ""
-            ask = `¿En qué punto medio nos vemos?${zones ? `\n${zones}\n` : " "}Puedes elegir una zona sugerida o escribir otra.`
+        if(kind === "punto_medio"){
+            const zones = Array.isArray(cfg?.meetupAreas) && cfg.meetupAreas.length ? `\nZonas sugeridas: ${cfg.meetupAreas.join(", ")}` : ""
+            ask = `¿En qué punto medio nos vemos?${zones ? `${zones}\n` : " "}Puedes elegir una de las zonas sugeridas o proponer otra.`
+        } else if(kind === null){
+            ask = "Compárteme los detalles para la entrega (dirección, referencias, etc.)."
         }
         const assistantMessage = await db.message.create({
-            data: { chatId, role: "assistant", content: ask },
+            data: { chatId, role: "assistant", content: ask.trim() },
             select: { id: true, role: true, content: true, createdAt: true }
         })
         return NextResponse.json({ message: assistantMessage })
@@ -559,10 +636,11 @@ export async function POST(req: NextRequest, { params }: { params: { chatId: str
             return NextResponse.json({ message: assistantMessage })
         }
         const detailsText = text.trim().slice(0, 300)
-        const shippingDetails = pending.shippingMethod.includes("domicilio") ? { address: detailsText } : { meetupPlace: detailsText }
+        const methodKind = detectShippingKind(pending.shippingMethod)
+        const shippingDetails = methodKind === "domicilio" ? { address: detailsText } : { meetupPlace: detailsText }
         pendingByChat.set(chatId, { step: "chg_final_confirm", saleId: pending.saleId, shippingMethod: pending.shippingMethod, shippingDetails })
 
-        const guide = `¿Confirmas cambiar la entrega a **${pending.shippingMethod}**?\n${ pending.shippingMethod.includes("domicilio") ? `Dirección: ${detailsText}` : `Punto: ${detailsText}` }\n(responde sí/no)`
+        const guide = `¿Confirmas cambiar la entrega a **${humanizeShippingMethod(pending.shippingMethod)}**?\n${shippingDetailLabel(methodKind)}: ${detailsText}\n(responde sí/no)`
         const assistantMessage = await db.message.create({
             data: { chatId, role: "assistant", content: guide },
             select: { id: true, role: true, content: true, createdAt: true }
@@ -585,7 +663,7 @@ export async function POST(req: NextRequest, { params }: { params: { chatId: str
         }
 
         if(yesRe.test(normalized)){
-            const update = await db.sale.update({
+            await db.sale.update({
                 where: { id: sale.id }, 
                 data: { shippingMethod: pending.shippingMethod, shippingDetails: pending.shippingDetails ?? null },
                 include: { product: true }
@@ -593,20 +671,16 @@ export async function POST(req: NextRequest, { params }: { params: { chatId: str
 
             const { cfg } = await getCheckoutSettings()
             const contactLine = cfg?.sellerContact ? `\nContacto del vendedor: ${cfg.sellerContact}` : ""
-            const detailLine = pending.shippingMethod === "recoleccion"
-                ? (() => {
-                  const addr = cfg?.pickupAddress ? ` en ${cfg.pickupAddress}` : ""
-                  const hours = cfg?.pickupHours ? ` (${cfg.pickupHours})` : ""
-                  return `${addr}${hours}` ? `\nRetiro${addr}${hours}.` : ""
-                })()
-                : pending.shippingDetails
-                ? `\n${pending.shippingMethod.includes("domicilio") ? "Dirección" : "Punto"}: ${
-                    pending.shippingDetails.address || pending.shippingDetails.meetupPlace
-                    }`
+            const methodKind = detectShippingKind(pending.shippingMethod)
+            const detailValue = pending.shippingDetails?.address ?? pending.shippingDetails?.meetupPlace ?? ""
+            const detailLine = methodKind === "recoleccion"
+                ? pickupHint(cfg)
+                : detailValue
+                ? `\n${shippingDetailLabel(methodKind)}: ${detailValue}`
                 : ""
 
             pendingByChat.delete(chatId)
-            const reply = `Listo. Actualicé tu pedido a **${pending.shippingMethod}**.${detailLine}${contactLine}`
+            const reply = `Listo. Actualicé tu pedido a **${humanizeShippingMethod(pending.shippingMethod)}**.${detailLine}${contactLine}`
             const assistantMessage = await db.message.create({
                 data: { chatId, role: "assistant", content: reply },
                 select: { id: true, role: true, content: true, createdAt: true }
@@ -898,9 +972,11 @@ export async function POST(req: NextRequest, { params }: { params: { chatId: str
             return NextResponse.json({ message: assistantMessage })
         }
         
-        const { payments, shipping } = await getCheckoutSettings()
-        const pick = payments.length ? fuzzyPick(payments, text) : text.trim().toLowerCase()
-        const paymentMethod = (pick || text.trim().toLowerCase()).slice(0, 40)
+        const { payments, shipping, cfg } = await getCheckoutSettings()
+        const trimmedPayment = text.trim()
+        const pick = payments.length ? fuzzyPick(payments, trimmedPayment) : null
+        const fallbackPayment = trimmedPayment || ""
+        const paymentMethod = (pick ?? fallbackPayment).slice(0, 60)
 
         pendingByChat.set(chatId, {
             step: "await_shipping",
@@ -911,8 +987,10 @@ export async function POST(req: NextRequest, { params }: { params: { chatId: str
             paymentMethod,
         })
 
-        const shipList = shipping.length ? shipping.join(", ") : "-"
-        const msg = shipping.length ? `Recibido: pago por ${paymentMethod}. ¿Cómo deseas la entrega? Opciones: ${shipList}.` : `Recibido: pago por ${paymentMethod}. ¿Cómo deseas la entrega? (No tengo métodos configurados, escribe tu preferencia).`
+        const methodLabelForMsg = paymentMethod || "(sin especificar)"
+        const msg = shipping.length
+            ? `Recibido: pago por ${methodLabelForMsg}. ¿Cómo deseas la entrega?\n${formatShippingOptions(shipping, cfg)}`
+            : `Recibido: pago por ${methodLabelForMsg}. ¿Cómo deseas la entrega? (No tengo métodos configurados, escribe tu preferencia).`
         const assistantMessage = await db.message.create({
             data: { chatId, role: "assistant", content: msg },
             select: { id: true, role: true, content: true, createdAt: true }
@@ -932,16 +1010,34 @@ export async function POST(req: NextRequest, { params }: { params: { chatId: str
         }
 
         const { shipping, cfg } = await getCheckoutSettings()
-        const pick = shipping.length ? fuzzyPick(shipping, text) : text.trim().toLowerCase()
-        const shippingMethod = (pick || text.trim().toLowerCase()).slice(0, 40)
+        const trimmedInput = text.trim()
+        const fuzzyMatch = shipping.length ? fuzzyPick(shipping, trimmedInput) : null
+        const resolvedFromIntent = methodFromText(trimmedInput)
+        const matchedOption = shipping.length ? (fuzzyMatch ?? resolveShippingOption(shipping, resolvedFromIntent)) : null
 
-        // Quiere detalles?
-        let needDetails = false
-        if(shippingMethod.includes("domicilio")) needDetails = true
-        if(shippingMethod.includes("punto")) needDetails = true
+        if(shipping.length && !matchedOption){
+            const partsMsg = formatShippingOptions(shipping, cfg)
+            const assistantMessage = await db.message.create({
+                data: { chatId, role: "assistant", content: `No entendí la opción. Estas son las alternativas:\n${partsMsg}` },
+                select: { id: true, role: true, content: true, createdAt: true }
+            })
+            return NextResponse.json({ message: assistantMessage })
+        }
 
-        if(!needDetails && shippingMethod.includes("recoleccion")){
-            // Pasar directo o fonfirm final
+        const rawChoice = matchedOption ?? trimmedInput
+        if(!rawChoice){
+            const assistantMessage = await db.message.create({
+                data: { chatId, role: "assistant", content: "Necesito que me indiques cómo deseas la entrega (domicilio, punto medio, recolección, etc.)." },
+                select: { id: true, role: true, content: true, createdAt: true }
+            })
+            return NextResponse.json({ message: assistantMessage })
+        }
+
+        const { method: shippingMethod, kind } = canonicalizeShipping(rawChoice)
+        const needsDetails = kind === "domicilio" || kind === "punto_medio"
+        const methodLabel = humanizeShippingMethod(shippingMethod)
+
+        if(!needsDetails && kind === "recoleccion"){
             pendingByChat.set(chatId, {
                 step: "await_final_confirm",
                 productId: pending.productId,
@@ -951,19 +1047,14 @@ export async function POST(req: NextRequest, { params }: { params: { chatId: str
                 paymentMethod: pending.paymentMethod,
                 shippingMethod,
             })
-            const addr = cfg?.pickupAddress ? ` en ${cfg.pickupAddress}` : ""
-            const hours = cfg?.pickupHours ? ` (${cfg.pickupHours})` : ""
-            const hint = addr || hours ? `\nRetiro${addr}${hours}.` : ""
-            const guide = `Perfecto: ${shippingMethod}. ${hint}\n¿Confirmas tu pedido? (sí/no)`
+            const guide = `Perfecto: ${methodLabel}.${pickupHint(cfg)}\n¿Confirmas tu pedido? (sí/no)`
             const assistantMessage = await db.message.create({
                 data: { chatId, role: "assistant", content: guide },
                 select: { id: true, role: true, content: true, createdAt: true }
-
             })
             return NextResponse.json({ message: assistantMessage })
         }
 
-        // Pedir detalles
         pendingByChat.set(chatId, {
             step: "await_shipping_details",
             productId: pending.productId,
@@ -974,9 +1065,14 @@ export async function POST(req: NextRequest, { params }: { params: { chatId: str
             shippingMethod,
         })
 
-        const ask = shippingMethod.includes("domicilio") ? "Comparteme la direccion de entrega y una referencia." : "¿En qué punto medio nos vemos? Puedes elegir alguna zona sugerida o escribir la tuya."
+        let ask = "Compárteme los detalles para la entrega (dirección, referencias, etc.)."
+        if(kind === "domicilio") ask = "Compárteme la dirección de entrega y una referencia."
+        if(kind === "punto_medio"){
+            const zones = Array.isArray(cfg?.meetupAreas) && cfg.meetupAreas.length ? `\nZonas sugeridas: ${cfg.meetupAreas.join(", ")}` : ""
+            ask = `¿En qué punto medio nos vemos?${zones ? `${zones}\n` : " "}Puedes elegir una zona sugerida o proponer otra.`
+        }
         const assistantMessage = await db.message.create({
-            data: { chatId, role: "assistant", content: ask },
+            data: { chatId, role: "assistant", content: ask.trim() },
             select: { id: true, role: true, content: true, createdAt: true },
         })
         return NextResponse.json({ message: assistantMessage })
@@ -993,8 +1089,9 @@ export async function POST(req: NextRequest, { params }: { params: { chatId: str
             return NextResponse.json({ message: assistantMessage })
         }
         const detailsText = text.trim().slice(0, 300)
-        const shippingDetails = pending.shippingMethod.includes("domicilio") ? { address: detailsText } : { meetupPlace: detailsText }
-        
+        const methodKind = detectShippingKind(pending.shippingMethod)
+        const shippingDetails = methodKind === "domicilio" ? { address: detailsText } : { meetupPlace: detailsText }
+
         pendingByChat.set(chatId, {
             step: "await_final_confirm",
             productId: pending.productId,
@@ -1006,15 +1103,14 @@ export async function POST(req: NextRequest, { params }: { params: { chatId: str
             shippingDetails,
         })
 
-        const guide = `Gracias. ¿Confirmas tu pedido? (sí/no)
-            Nombre: ${pending.customerName}
-            Pago: ${pending.paymentMethod}
-            Entrega: ${pending.shippingMethod}
-            ${
-            pending.shippingMethod.includes("domicilio")
-                ? `Dirección: ${detailsText}`
-                : `Punto: ${detailsText}`
-            }`
+        const summaryLines = [
+            "Gracias. ¿Confirmas tu pedido? (sí/no)",
+            `Nombre: ${pending.customerName}`,
+            `Pago: ${pending.paymentMethod}`,
+            `Entrega: ${humanizeShippingMethod(pending.shippingMethod)}`,
+            `${shippingDetailLabel(methodKind)}: ${detailsText}`,
+        ]
+        const guide = summaryLines.join("\n")
         const assistantMessage = await db.message.create({
             data: { chatId, role: "assistant", content: guide },
             select: { id: true, role: true, content: true, createdAt: true }
@@ -1089,7 +1185,24 @@ export async function POST(req: NextRequest, { params }: { params: { chatId: str
 
             pendingByChat.delete(chatId)
             clearCandidates(chatId)
-            const reply = `Listo, ${pending.customerName}. Aparté ${want} × ${p.name} (SKU ${p.sku}). Pago: ${pending.paymentMethod}. Entrega: ${pending.shippingMethod}. Pedido **pendiente de pago**.`
+            const { cfg } = await getCheckoutSettings()
+            const methodKind = detectShippingKind(pending.shippingMethod)
+            const methodLabel = humanizeShippingMethod(pending.shippingMethod)
+            const detailValue = pending.shippingDetails?.address ?? pending.shippingDetails?.meetupPlace ?? ""
+            const summaryLines: string[] = [
+                `Listo, ${pending.customerName}. Aparté ${want} × ${p.name} (SKU ${p.sku}).`,
+                `Pago: ${pending.paymentMethod}.`,
+                `Entrega: ${methodLabel}.`
+            ]
+            if(methodKind === "recoleccion"){
+                const pickupLine = pickupHint(cfg).trim()
+                if(pickupLine) summaryLines.push(pickupLine)
+            }
+            if(detailValue){
+                summaryLines.push(`${shippingDetailLabel(methodKind)}: ${detailValue}.`)
+            }
+            summaryLines.push("Pedido **pendiente de pago**.")
+            const reply = summaryLines.join("\n")
             const [assistantMessage] = await Promise.all([
                 db.message.create({
                     data: { chatId, role: "assistant", content: reply },
@@ -1114,7 +1227,11 @@ export async function POST(req: NextRequest, { params }: { params: { chatId: str
         }
 
         const total = priceStr(p.priceCents * pending.qty)
-        const guide = `¿Confirmas ${pending.qty} × ${p.name} por $${total}? (sí/no). Puedes cambiar la cantidad escribiendo “mejor 3”.`
+        const methodKind = detectShippingKind(pending.shippingMethod)
+        const methodLabel = humanizeShippingMethod(pending.shippingMethod)
+        const detailValue = pending.shippingDetails?.address ?? pending.shippingDetails?.meetupPlace ?? ""
+        const detailLine = detailValue ? `\n${shippingDetailLabel(methodKind)}: ${detailValue}` : ""
+        const guide = `¿Confirmas ${pending.qty} × ${p.name} por $${total}? (sí/no). Puedes cambiar la cantidad escribiendo “mejor 3”.\nEntrega: ${methodLabel}${detailLine}`
         const assistantMessage = await db.message.create({
             data: { chatId, role: "assistant", content: guide },
             select: { id: true, role: true, content: true, createdAt: true }
@@ -1137,8 +1254,18 @@ export async function POST(req: NextRequest, { params }: { params: { chatId: str
         return NextResponse.json({ message: assistantMessage }) 
       }
       if (product.stock < parsedBySku.qty) {
+        const available = product.stock ?? 0
+        if(available <= 0){
+          const assistantMessage = await db.message.create({
+            data: { chatId, role: "assistant", content: `${product.name} está agotado actualmente.` },
+            select: { id: true, role: true, content: true, createdAt: true },
+          }) 
+          return NextResponse.json({ message: assistantMessage }) 
+        }
+        setCandidates(chatId, [product.id])
+        pendingByChat.set(chatId, { step: "await_qty", productId: product.id, sku: product.sku, suggestedQty: available })
         const assistantMessage = await db.message.create({
-          data: { chatId, role: "assistant", content: `Solo tengo ${product.stock} de ${product.name}. ¿Quieres ajustar la cantidad?` },
+          data: { chatId, role: "assistant", content: `Solo tengo ${available} de ${product.name}. ¿Ajustamos a ${available}?` },
           select: { id: true, role: true, content: true, createdAt: true },
         }) 
         return NextResponse.json({ message: assistantMessage }) 
@@ -1150,7 +1277,7 @@ export async function POST(req: NextRequest, { params }: { params: { chatId: str
         })
         return NextResponse.json({ message: assistantMessage })
       }
-      // Guarmdamos el candidato unico por si el usuarios dice que quiere mas
+      // Guardamos el candidato único por si el usuario dice que quiere más
       setCandidates(chatId, [product.id])
       // Dejar confirmación pendiente
       pendingByChat.set(chatId, { step: "await_confirm", productId: product.id, sku: product.sku, qty: parsedBySku.qty }) 

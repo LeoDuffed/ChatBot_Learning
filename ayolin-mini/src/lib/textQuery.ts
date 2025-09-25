@@ -62,6 +62,20 @@ export type Intent =
 export function detectIntent(text: string): Intent {
   const t = normalize(text)  
 
+  if (
+    /\b(metodos?\s+de\s+(envio|entrega)|como\s+(entregan|envian)|envio\s+a\s+domicilio|envio\s+domicilio|envian\s+a\s+domicilio|recoleccion|recolección|punto\s+medio|pickup)\b/.test(t) ||
+    (/\b(tienes|hay|manejas|ofreces|ofrece|ofrecen)\b/.test(t) && /\b(envio|envío|entrega|domicilio|pickup|punto\s+medio|recoleccion|recolección)\b/.test(t))
+  ) {
+    return "ask_shipping_methods"
+  }
+
+  if (
+    /\b(metodos?\s+de\s+pago|formas?\s+de\s+pago|como\s+puedo\s+pagar|aceptan?\s+(tarjeta|efectivo|transferencia|spei|paypal)|pago\s+con|puedo\s+pagar\s+con)\b/.test(t) ||
+    (/\b(tienes|hay|manejas|ofreces|ofrece|ofrecen)\b/.test(t) && /\b(tarjeta|efectivo|transferencia|spei|paypal|pago)\b/.test(t))
+  ) {
+    return "ask_payment_methods"
+  }
+
   if (/\b(quiero|comprar|compra|me\s+lo\s+llevo|me\s+llevo|agrega|añade|sumar)\b/.test(t)) {
     return "buy" 
   }
@@ -78,14 +92,6 @@ export function detectIntent(text: string): Intent {
   }
 
   if (/\b(precio|cuanto\s+cuesta|cuánto\s+cuesta|vale|coste)\b/.test(t)) return "ask_price"
-
-  if (
-    /\b(metodos?\s+de\s+pago|formas?\s+de\s+pago|como\s+puedo\s+pagar|aceptan\s+(tarjeta|efectivo|transferencia|spei)|pago\s+con)\b/.test(t)
-  ) return "ask_payment_methods"
-
-  if (
-    /\b(metodos?\s+de\s+(envio|entrega)|como\s+(entregan|envian)|envio\s+a\s+domicilio|recoleccion|punto\s+medio|pickup)\b/.test(t)
-  ) return "ask_shipping_methods"
 
   return null
 }
