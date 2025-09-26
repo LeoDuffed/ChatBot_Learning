@@ -11,6 +11,12 @@ import {
 import { 
     getPaymentMethodsTool, 
     getShippingMethodsTool,
+    cartAddItemTool,
+    cartGetTool,
+    cartSetPaymentTool,
+    cartSetShippingTool,
+    cartSetContactTool,
+    checkoutSubmitTool
 } from "./checkout";
 import type { ZodTypeAny } from "zod";
 
@@ -22,6 +28,12 @@ export const tools: Tool<any, any>[] = [
     productsSearchTool,
     getPaymentMethodsTool,
     getShippingMethodsTool,
+    cartAddItemTool,
+    cartGetTool,
+    cartSetPaymentTool,
+    cartSetShippingTool,
+    cartSetContactTool,
+    checkoutSubmitTool,
 ]
 
 function toOpenAIParams(schema: ZodTypeAny, name: string){

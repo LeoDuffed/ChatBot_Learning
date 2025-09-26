@@ -24,7 +24,6 @@ export async function POST(req: NextRequest, context: { params: Promise<{ chatId
 
     const bot = await getOrCreateMyBot() 
     
-    // 3) Fallback —> agente con tools (anti-alucinaciones)
     // Tomamos últimos 30 mensajes como contexto
     const history = await db.message.findMany({
         where: { chatId },
@@ -40,7 +39,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ chatId
     const { content } = await runMiniAyolinTurn({
         userMessage: text,
         priorMessages,
-        ctx: { db, botId: bot.id, userId: null },
+        ctx: { db, botId: bot.id, chatId, userId: null },
     }) 
 
     const reply = content?.trim() || "¿En qué te puedo ayudar?" 

@@ -265,7 +265,7 @@ export default function ChatPage(){
 
                 {/* Metodos de envio */}
                 <div className="space-y-2 border border-neutral-800 rounded-lg p-3 bg-neutral-900/40">
-                    <div className="text-xs opacity-70 mb-1">Envios/Entrega eceptados</div>
+                    <div className="text-xs opacity-70 mb-1">Metodos de Entrega eceptados</div>
                     <div className="flex flex-col gap-2">
                       {ALL_SHIPPING_METHODS.map((m) => (
                         <label key={m} className="flex items-center gap-2 text-sm">
@@ -278,14 +278,15 @@ export default function ChatPage(){
                     </div>
 
                     {/* Config extras */}
-                    <div className="mt-3 space-y-2">
-                      <div className="text-xs opacity-75">Direccion de recolecion</div>
+                    <div className="mt-3 space-y-2">  
+                      <div className="text-xs opacity-75">Tu contacto</div>
                       <Input
-                        placeholder="Ej. +52 55 1234 5678, @usuario, correo@dominio.com"
+                        placeholder="Ej. +52 55 1234 5678"
                         value={sellerContact}
                         onChange={(e) => setSellerContact(e.target.value)}
                         className="bg-neutral-800 border-neutral-700 text-white"
                       />
+                      <div className="text-xs opacity-75">Direccion de recolecion</div>
                       <Input
                         placeholder="Ej. Av. Siempre Viva 123"
                         value={pickupAddress}
