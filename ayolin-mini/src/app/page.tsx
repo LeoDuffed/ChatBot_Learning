@@ -31,6 +31,28 @@ type BotSettings = {
   } | null
 }
 
+type SaleItemDTO = {
+  id: string
+  sku: string
+  nameSanpshot: string
+  priceCentsSnapshot: number
+  qty: number
+}
+
+type SaleDTO = {
+  id: string
+  status: "pendint_payment" | "paid" | "cancelled"
+  totalCents: number
+  paymentMethod?: string | null
+  shippingMethod?: string | null
+  shippingAddress?: string | null
+  customerName?: string | null
+  customerPhone?: string | null
+  notes?: string | null
+  createdAt: string
+  items: SaleItemDTO[]
+}
+
 const ALL_PAYMENT_METHODS = ["cash", "transfer", "card"] as const
 const ALL_SHIPPING_METHODS = ["domicilio", "punto_medio", "recoleccion"] as const
 
@@ -41,7 +63,7 @@ export default function ChatPage(){
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const endRef = useRef<HTMLDivElement>(null)
-  const [sales, setSales] = useState<any[]>([])
+  const [sales, setSales] = useState<SaleDTO[]>([])
   const [adminPw, setAdminPw] = useState("")
   const [prodForm, setProdForm] = useState({ sku:"", name:"", priceCents:"", stock:""})
   const [intentForm, setIntentForm] = useState({ sku:"", qty: "" })
@@ -52,6 +74,10 @@ export default function ChatPage(){
   const [pickupHours, setPickupHours] = useState<string>("")
   const [meetupAreasText, setMeetupAreasText] = useState<string>("")
   const [sellerContact, setSellerContact] = useState<string>("")
+
+  const money = (cents: number) => `$${(cents / 100).toFixed(2)}`
+  const pmLabel: Record<string, string> = { cash: "Efectivo", transfer: "Transferencia", card: "Tarjeta" }
+  const smLabel: Record<string, string> = {  domicilio: "Envío a domicilio", punto_medio: "Punto medio", recoleccion: "Recolección" }
 
   // Auto scroll 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth'}) }, [messages])
@@ -184,6 +210,7 @@ export default function ChatPage(){
     // Recargar mensajes de la DB
     await loadMessages(chatId!)
     await loadChats()
+    await loadPendingSales()
   }
 
   const activeChatTitle = useMemo(
@@ -429,44 +456,90 @@ export default function ChatPage(){
                   <div className="space-y-2 max-h-64 overflow-auto pr-1">
                     {sales.length === 0 && <div className="text-xs text-white/60">Sin Pendientes</div>}
                     {sales.map((s) => (
-                      <div key={s.id} className="border border-neutral-800 rounded p-2 text-sm space-y-1 bg-neutral-900/50">
-                        <div className="flex justify-between">
-                          <div className="font-medium">{s.product?.name ?? s.productId}</div>
-                          <div className="opacity-60">{s.status}</div>
+                      <div key={s.id} className="border border-neutral-800 rounded p-2 text-sm space-y-2 bg-neutral-900/50">
+                        <div className="flex items-start justify-between pag-2">
+                          <div className="font-medium">
+                            Venta <span className="opacity-60">#{s.id.slice(-6)}</span>
+                          </div>
+                          <div className="opcatity-60">{new Date(s.createdAt).toLocaleDateString()}</div>
                         </div>
-                        <div> Cant: {s.qty} </div>
-                        <div className="flex gap-2">
+
+                        {/* Items */}
+                        <div className="space-y-1">
+                          {s.items.map((it) => (
+                            <div key={it.id} className="flex items-center justify-between">
+                              <div className="truncate">
+                                {it.qty} x {it.nameSanpshot} <span className="opacity-60">({it.sku})</span>
+                              </div>
+                              <div className="tabular-nums opacity-80">{money(it.priceCentsSnapshot)} c/u</div>
+                            </div>
+                          ))}
+                        </div>
+
+                        <div className="flex items-center justify-between pt-1">
+                          <div className="text-xs opacity-70">Total</div>
+                          <div className="font-semibold tabular-nums">{money(s.totalCents)}</div>
+                        </div>
+
+                        {/* Datos del checkoput */}
+                        <div className="grid grid-cols-2 gap-2 text-sm">
+                          <div className="opacity-80">
+                            <div className="opacity-60">Pago</div>
+                            <div className="font-medium">{s.paymentMethod ? (pmLabel[s.paymentMethod] ?? s.paymentMethod) : "-"}</div>
+                          </div>
+                          <div className="opacity-80">
+                            <div className="opacity-60">Entrega</div>
+                            <div className="font-medium">
+                              {s.shippingMethod ? (smLabel[s.shippingMethod] ?? s.shippingMethod) : "-"}
+                            </div>
+                            {s.shippingAddress && <div className="opacity-70">{s.shippingAddress}</div>}
+                          </div>
+                          <div className="opacity-80">
+                            <div className="opacity-60">Cliente</div>
+                            <div className="font-medium">{s.customerName || "-"}</div>
+                            {s.customerPhone && <div className="opacity-70">{s.customerPhone}</div>}
+                          </div>
+                          <div className="opacity-80">
+                            <div className="opacity-60">Estado</div>
+                            <div className="font-medium">{s.status}</div>
+                          </div>
+                        </div>
+
+                        {/* Acciones */}
+                        <div className="flex gap-2 pt-1">
                           <Button
                             size="sm"
                             className="bg-emerald-600 text-black hover:bg-emerald-500"
-                            onClick={async() => {
+                            onClick={async () => {
                               const r = await fetch(`/api/sales/${s.id}/mark-paid`, {
                                 method: "POST",
-                                headers: {"Content-Type":"application/json"},
+                                headers: { "Content-Type": "application/json" },
                                 body: JSON.stringify({ password: adminPw }),
                               })
                               if(!r.ok) { alert("Contraseña inválida o error"); return }
                               await loadPendingSales()
                             }}
                           >
-                            ✔
+                            Marcar Pagada
                           </Button>
+
                           <Button 
                             size="sm"
                             variant="destructive"
-                            onClick={async() => {
+                            onClick={async () => {
                               const r = await fetch(`/api/sales/${s.id}/cancel`, {
                                 method: "POST",
-                                headers: {"Content-Type":"application/json"},
-                                body: JSON.stringify({ password: adminPw}),
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ passowrd: adminPw })
                               })
-                              if(!r.ok){alert("Contraseña inválida o error"); return}
+                              if(!r.ok){ alert("Contrasen1a inválida o error"); return }
                               await loadPendingSales()
                             }}
                           >
-                            x
+                            Cancelar
                           </Button>
                         </div>
+
                       </div>
                     ))}
                   </div>
