@@ -5,7 +5,8 @@ import { z } from "zod"
 export type ToolContext = {
     db: typeof import("@/lib/db").db
     botId: string
-    userId?: string | null
+    chatId: string
+    userId?: string | null    
 }
 
 export type Tool<TInput extends z.ZodTypeAny = z.ZodTypeAny, TOutput = any> = {

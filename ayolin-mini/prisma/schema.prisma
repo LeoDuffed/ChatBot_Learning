@@ -28,6 +28,10 @@ model Chat {
   updatedAt DateTime  @updatedAt
   title     String?
   messages  Message[]
+
+  // Relaciones nuevas
+  carts     Cart[]
+  sales     Sale[]
 }
 
 model Message {
@@ -42,26 +46,21 @@ model Message {
 
 /**
  * =========================
- * NUEVO: Mini-Ayolin Ventas
+ * Mini-Ayolin Ventas (Carrito completo)
  * =========================
  */
 
-/**
- * Estado de la venta:
- * - pending_payment: apartada, esperando confirmación de pago del jefe
- * - paid: pagada/confirmada
- * - cancelled: cancelada (debe reponer stock)
- */
 enum SaleStatus {
   pending_payment
   paid
   cancelled
 }
 
-/**
- * Un bot por usuario (o más, si luego escalas).
- * Aquí guardamos la contraseña (hasheada) del “jefe”.
- */
+enum CartStatus {
+  open
+  locked
+}
+
 model Chatbot {
   id            String   @id @default(auto()) @map("_id") @db.ObjectId
   ownerUserId   String
@@ -69,10 +68,12 @@ model Chatbot {
   salesEnabled  Boolean  @default(true)
   salesPassHash String?
 
-  // === NUEVO ===
-  paymentMethods String[]        @default([])
-  shippingMethods String[]       @default([])
+  // === CONFIG VENTAS/ENVÍO ===
+  paymentMethods  String[] @default([])
+  shippingMethods String[] @default([])
   shippingConfig  Json?
+  // Opcional: datos para instrucciones de pago (CLABE, beneficiario, etc.)
+  paymentConfig   Json?
 
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -82,14 +83,11 @@ model Chatbot {
   sales           Sale[]
   inventoryLedger InventoryLedger[]
   catalogs        CatalogFile[]
+  carts           Cart[]
 
   @@index([ownerUserId])
 }
 
-/**
- * Archivos de catálogo subidos (PDF/imagen).
- * text: texto extraído (PDF u OCR); opcional.
- */
 model CatalogFile {
   id        String   @id @default(auto()) @map("_id") @db.ObjectId
   chatbotId String   @db.ObjectId
@@ -102,11 +100,6 @@ model CatalogFile {
   @@index([chatbotId, createdAt])
 }
 
-/**
- * Productos del bot.
- * Para evitar problemas con decimales en Mongo, usamos priceCents (ej. $199.90 -> 19990).
- * Regla: SKU único por bot.
- */
 model Product {
   id        String  @id @default(auto()) @map("_id") @db.ObjectId
   chatbotId String  @db.ObjectId
@@ -121,47 +114,114 @@ model Product {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  sales           Sale[]            @relation("ProductSales")
-  inventoryLedger InventoryLedger[] @relation("ProductInventoryLedger")
+  // Relaciones
+  saleItems        SaleItem[]           @relation("SaleItemProduct")
+  inventoryLedger  InventoryLedger[]    @relation("ProductInventoryLedger")
+  cartItems        CartItem[]
 
   @@unique([chatbotId, sku])
   @@index([chatbotId, name])
 }
 
 /**
- * Venta/pedido. Se crea al confirmar el cliente la compra.
- * Queda en pending_payment hasta que el jefe confirme pago.
+ * Carrito anclado al chat.
+ * No usamos unique parcial (Prisma/Mongo no soporta parcial); garantizamos 1 "open" por chat en lógica.
  */
-model Sale {
+model Cart {
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  chatbotId     String   @db.ObjectId
+  bot           Chatbot  @relation(fields: [chatbotId], references: [id])
+  chatId        String   @db.ObjectId
+  chat          Chat     @relation(fields: [chatId], references: [id])
+  status        CartStatus @default(open)
+  subtotalCents Int      @default(0)
+
+  // Datos de checkout recogidos
+  paymentMethod  String?
+  shippingMethod String?
+  shippingAddress String?
+  contactName    String?
+  contactPhone   String?
+  notes          String?
+
+  items     CartItem[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([chatbotId, chatId, status])
+  @@index([chatId, status])
+}
+
+model CartItem {
   id        String  @id @default(auto()) @map("_id") @db.ObjectId
-  chatbotId String  @db.ObjectId
-  bot       Chatbot @relation(fields: [chatbotId], references: [id])
+  cartId    String  @db.ObjectId
+  cart      Cart    @relation(fields: [cartId], references: [id], onDelete: Cascade)
 
   productId String  @db.ObjectId
-  product   Product @relation(name: "ProductSales", fields: [productId], references: [id])
+  product   Product @relation(fields: [productId], references: [id])
 
-  qty           Int
-  status        SaleStatus @default(pending_payment)
-  paymentMethod String?
-  customerRef   String?
-  // === NUEVO ===
-  customerName   String?
-  shippingMethod String?
-  shippingDetails Json?
-  totalCents      Int?
+  sku                 String
+  nameSnapshot        String
+  priceCentsSnapshot  Int
+  qty                 Int
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([chatbotId, status, createdAt])
+  @@index([cartId])
 }
 
 /**
- * Libro mayor de inventario para auditoría (entradas/salidas).
- * delta: +entrada / -salida
- * reason: "restock" | "sale" | "adjust" | etc.
- * ref: id de venta u otra referencia
+ * Venta/pedido. Se crea al confirmar.
+ * Multi-producto mediante SaleItem[]
  */
+model Sale {
+  id            String     @id @default(auto()) @map("_id") @db.ObjectId
+  chatbotId     String     @db.ObjectId
+  bot           Chatbot    @relation(fields: [chatbotId], references: [id])
+
+  chatId        String     @db.ObjectId
+  chat          Chat       @relation(fields: [chatId], references: [id])
+
+  status        SaleStatus @default(pending_payment)
+  totalCents    Int
+  paymentMethod String?
+  shippingMethod String?
+  shippingAddress String?
+  shippingDetails Json?
+  customerName  String?
+  customerPhone String?
+  notes         String?
+
+  // Idempotencia opcional
+  idempotencyKey String?
+
+  items      SaleItem[]
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([chatbotId, status, createdAt])
+  @@index([chatId, createdAt])
+  @@index([idempotencyKey])
+}
+
+model SaleItem {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  saleId    String   @db.ObjectId
+  sale      Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
+
+  productId String?  @db.ObjectId
+  product   Product? @relation(name: "SaleItemProduct", fields: [productId], references: [id])
+
+  sku                 String
+  nameSnapshot        String
+  priceCentsSnapshot  Int
+  qty                 Int
+
+  createdAt DateTime @default(now())
+}
+
 model InventoryLedger {
   id        String  @id @default(auto()) @map("_id") @db.ObjectId
   chatbotId String  @db.ObjectId

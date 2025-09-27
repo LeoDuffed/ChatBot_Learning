@@ -1,54 +1,55 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import OpenAI from "openai";
-import { getOpenAIFunctions, dispatchToolCall } from "./tools/registry";
-import type { ToolContext } from "./tools/types";
+
+import OpenAI from "openai"
+import { getOpenAIFunctions, dispatchToolCall } from "./tools/registry"
+import type { ToolContext } from "./tools/types"
 import type {
   ChatCompletionMessageParam,
   ChatCompletionAssistantMessageParam,
   ChatCompletionToolMessageParam,
-} from "openai/resources/chat/completions";
+} from "openai/resources/chat/completions"
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! })
 
 const SYSTEM_PROMPT = `
-Eres AYOLIN, asistente de ventas de ropa.
+Eres AYOLIN, mi asistente en venta de ropa.
 
 REGLAS ESTRICTAS:
 1) NUNCA inventes SKUs, nombres, precios ni stock.
-2) Para cualquier dato de catálogo (nombre, precio, stock, SKU) **SIEMPRE** usa tools antes de responder.
-3) Para preguntas sobre configuración del vendedor (métodos de pago y métodos de envío/entrega),
-   **SIEMPRE** usa tools (get_payment_methods, get_shipping_methods) antes de responder.
-4) Si las tools no devuelven resultados, di claramente que no lo encuentras y sugiere buscar por SKU o nombre más específico,
-   o bien que el dueño aún no configuró métodos.
-5) Responde en español, breve y claro.
-
-Si el usuario hace preguntas de charla general (no productos ni configuración), puedes responder normalmente,
-pero si la pregunta toca el catálogo o los métodos de pago/envío, debes invocar tools.
-` // Este system prompt lo tiene que editar cada persona, pero las reglas estrictas se mantienen
+2) Para catálogo (nombre, precio, stock, SKU) **SIEMPRE** usa tools de inventario.
+3) Para configuración (métodos de pago y envío) **SIEMPRE** usa tools get_payment_methods y get_shipping_methods.
+4) Flujo de compra **obligatorio** (carrito):
+   - Cuando el usuario pida comprar/agregar cantidades: usa \`cart_add_item\` y luego \`cart_get\`.
+   - Antes de confirmar: debes tener \`payment_method\`, \`shipping_method\` y \`contact\`. Si falta algo, PREGUNTA y llama \`cart_set_*\`.
+   - Para registrar la compra: **SIEMPRE** llama \`checkout_submit\`. No confirmes sin esa tool.
+5) Para pago por transferencia: NO inventes datos. Si existen, usa \`get_payment_instructions\`.
+6) No calcules totales manualmente. Léelos del carrito o venta. Responde breve y claro en español.
+`
 
 export async function runMiniAyolinTurn({
     userMessage,
     priorMessages,
     ctx,
-    maxToolHops = 4,
-} : {
+    maxToolHops = 8, 
+}: {
     userMessage: string
     priorMessages: { role: "user" | "assistant" | "system"; content: string; name?: string }[]
-    ctx: ToolContext;
+    ctx: ToolContext
     maxToolHops?: number
 }) {
+
     const functions = getOpenAIFunctions()
 
     const messages: ChatCompletionMessageParam[] = [
         { role: "system", content: SYSTEM_PROMPT },
         ...priorMessages.map((m) => ({
-            role: m.role,
-            content: m.content,
+        role: m.role,
+        content: m.content,
         })),
         { role: "user", content: userMessage },
     ]
 
-    for(let hop = 0; hop < maxToolHops; hop++){
+    for (let hop = 0; hop < maxToolHops; hop++) {
         const resp = await client.chat.completions.create({
             model: "gpt-4o-mini",
             messages,
@@ -58,13 +59,9 @@ export async function runMiniAyolinTurn({
         })
 
         const msg = resp.choices[0]?.message
+        if (!msg) return { content: "No pude obtener una respuesta.", messages }
 
-        // Si por alguna razon no viene mensaje, cortamos
-        if(!msg) return { content: "No pude obtener una respuesta.", messages }
-
-        // Si pide usar herramientas
-        if(msg.tool_calls && msg.tool_calls.length > 0){
-            // Primero empujamos el mensaje del assitente con las tool_calls
+        if (msg.tool_calls && msg.tool_calls.length > 0) {
             const assistantWithCalls: ChatCompletionAssistantMessageParam = {
                 role: "assistant",
                 content: msg.content ?? "",
@@ -72,16 +69,14 @@ export async function runMiniAyolinTurn({
             }
             messages.push(assistantWithCalls)
 
-            // Respondemos a cada tool_call con un mensaje de rol
-            for(const tc of msg.tool_calls){
-                if(tc.type !== "function") continue
-
+            for (const tc of msg.tool_calls) {
+                if (tc.type !== "function") continue
                 const callId = tc.id
                 const toolName = tc.function?.name
-                if(!callId || !toolName) continue
+                if (!callId || !toolName) continue
 
                 let args: unknown = {}
-                try{
+                try {
                     args = tc.function?.arguments ? JSON.parse(tc.function.arguments) : {}
                 } catch {
                     args = {}
@@ -96,12 +91,9 @@ export async function runMiniAyolinTurn({
                 }
                 messages.push(toolMsg)
             }
-
             continue
         }
-    
-        return { content: msg.content ?? "", messages}
+        return { content: msg.content ?? "", messages }
     }
-
-    return { content: "No pude completar la consulta", messages}
+    return { content: "No pude completar la consulta", messages }
 }
