@@ -431,6 +431,7 @@ export default function ChatPage(){
                             sku: intentForm.sku,
                             qty: Number(intentForm.qty||1),
                             paymentMethod: "cash",
+                            chatId: activeChatId,
                           }),
                         })
                         const data = await r.json()
