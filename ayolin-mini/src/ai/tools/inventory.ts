@@ -136,13 +136,14 @@ export const listAllProductsTool: Tool<z.ZodObject<any>> = {
         order_by: z.enum(["name_asc", "name_desc", "created_desc", "updated_desc"]).optional().default("name_asc")
     }),
     async execute({ in_stock_only, limit, after_id, order_by }, ctx: ToolContext){
-        const orderBy = order_by === "name_desc" 
-        ? { name: "desc" as const }
+        const orderBy = Array.isArray(order_by)
+        ? order_by : order_by === "name_desc"
+        ? [{ name: "desc" as const }, { id: "asc" as const }]
         : order_by === "created_desc"
-        ? { createdAt: "desc" as const }
+        ? [{ createdAt: "desc" as const }, { id: "asc" as const }]
         : order_by === "updated_desc"
-        ? { updatedAt: "desc" as const }
-        : { name: "asc" as const }
+        ? [{ updatedAt: "desc" as const }, { id: "asc" as const }]
+        : [{ name: "asc" as const }, { id: "asc" as const }]
 
         const where: any = {
             chatbotId: ctx.botId,
