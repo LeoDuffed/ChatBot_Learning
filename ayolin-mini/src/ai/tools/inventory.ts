@@ -125,3 +125,77 @@ export const checkStockTool: Tool = {
         return { ok: stock >= qty, available: stock, request: qty, name: p.name, priceCents: p.priceCents }
     }
 }
+
+export const listAllProductsTool: Tool<z.ZodObject<any>> = {
+    name: "list_all_products",
+    description: "Lista todos los productos del catálogo del bot (sin término de búsqueda). Útil cuando el usuario pide 'muéstrame todo lo que vendes'. Soporta filtro de solo en-stock y paginación por cursor.",
+    inputSchema: z.object({
+        in_stock_only: z.boolean().optional().default(false),
+        limit: z.number().int().positive().max(50).default(20),
+        after_id: z.string().optional(),
+        order_by: z.enum(["name_asc", "name_desc", "created_desc", "updated_desc"]).optional().default("name_asc")
+    }),
+    async execute({ in_stock_only, limit, after_id, order_by }, ctx: ToolContext){
+        const orderBy = order_by === "name_desc" 
+        ? { name: "desc" as const }
+        : order_by === "created_desc"
+        ? { createdAt: "desc" as const }
+        : order_by === "updated_desc"
+        ? { updatedAt: "desc" as const }
+        : { name: "asc" as const }
+
+        const where: any = {
+            chatbotId: ctx.botId,
+            ...(in_stock_only ? { stock: { gt: 0 } } : {}),
+        }
+
+        const useCursor = !!after_id
+        const queryBase: any = {
+            where,
+            take: limit,
+            orderBy,
+            select: { id: true, sku: true, name: true, description: true, priceCents: true, stock: true, updatedAt: true, createdAt: true }
+        }
+
+        if(useCursor){
+            queryBase.cursor = { id: after_id as string }
+            queryBase.skip = 1
+        }
+
+        const rows = await ctx.db.product.findMany(queryBase)
+
+        let next_after_id: string | null = null
+        if(rows.length === limit){
+            const last = rows[rows.length - 1]
+            const probe = await ctx.db.product.findMany({
+                where, 
+                take: 1, 
+                skip: 1, 
+                cursor: { id: last.id as string },
+                orderBy,
+                select: { id: true },
+            })
+            if(probe.length > 0) next_after_id = String(last.id)
+        }
+
+        const items = rows.map((p: any) => ({
+            id: String(p.id),
+            sku: p.sku,
+            name: p.name,
+            description: p.description ?? null,
+            priceCents: p.priceCents,
+            stock: p.stock ?? 0,
+        }))
+
+        return{
+            items, 
+            page_info: {
+                limit, 
+                next_after_id,
+                has_more: !!next_after_id,
+                order_by,
+                in_stock_only: !!in_stock_only
+            }
+        }
+    }
+}

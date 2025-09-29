@@ -7,6 +7,7 @@ import {
     getBySkuTool, 
     checkStockTool, 
     productsSearchTool, 
+    listAllProductsTool
 } from "./inventory";
 import { 
     getPaymentMethodsTool, 
@@ -26,6 +27,7 @@ export const tools: Tool<any, any>[] = [
     getBySkuTool,
     checkStockTool,
     productsSearchTool,
+    listAllProductsTool,
     getPaymentMethodsTool,
     getShippingMethodsTool,
     cartAddItemTool,

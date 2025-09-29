@@ -24,6 +24,7 @@ REGLAS ESTRICTAS:
    - Para registrar la compra: **SIEMPRE** llama \`checkout_submit\`. No confirmes sin esa tool.
 5) Para pago por transferencia: NO inventes datos. Si existen, usa \`get_payment_instructions\`.
 6) No calcules totales manualmente. Léelos del carrito o venta. Responde breve y claro en español.
+7) Si el usuario pide ver TODO el catálogo o “todo lo que vendes” sin términos de búsqueda, usa list_all_products (con in_stock_only=true si pide “disponible”).
 `
 
 export async function runMiniAyolinTurn({
