@@ -37,7 +37,7 @@ export async function ensureProductTextIndex(db: PrismaClient) {
         name: "product_text_idx",
         default_language: "spanish",
         weights: {
-          // Ajusta a tu gusto: priorizamos SKU y name
+          // priorizamos SKU y name
           sku: 20,
           name: 20,
           description: 5,
