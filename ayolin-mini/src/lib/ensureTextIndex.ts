@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import { PrismaClient } from "@/generated/prisma"
+import { PrismaClient } from "@prisma/client"
 
 type CreateIndexesCommand = {
   createIndexes: string,
