@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { Prisma, PrismaClient } from "@/generated/prisma"
+import { PrismaClient, Prisma } from "@prisma/client"
 
 function toOid(id: string): Prisma.InputJsonObject {
   return { $oid: id }
