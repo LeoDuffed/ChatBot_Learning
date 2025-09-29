@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 
-export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ chatId: string }> }) {
+export const runtime = "nodejs"
+export const dynamic = "force-dynamic"
+
+export async function DELETE(_req: NextRequest, { params }: { params: { chatId: string } }) {
     try{
         const { chatId } = await params;
 
