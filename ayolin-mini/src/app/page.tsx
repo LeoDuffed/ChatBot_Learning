@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-
 'use client'
 
 import {
@@ -34,14 +32,14 @@ type BotSettings = {
 type SaleItemDTO = {
   id: string
   sku: string
-  nameSanpshot: string
+  nameSnapshot: string
   priceCentsSnapshot: number
   qty: number
 }
 
 type SaleDTO = {
   id: string
-  status: "pendint_payment" | "paid" | "cancelled"
+  status: "pending_payment" | "paid" | "cancelled"
   totalCents: number
   paymentMethod?: string | null
   shippingMethod?: string | null
@@ -469,7 +467,7 @@ export default function ChatPage(){
                           {s.items.map((it) => (
                             <div key={it.id} className="flex items-center justify-between">
                               <div className="truncate">
-                                {it.qty} x {it.nameSanpshot} <span className="opacity-60">({it.sku})</span>
+                                {it.qty} x {it.nameSnapshot} <span className="opacity-60">({it.sku})</span>
                               </div>
                               <div className="tabular-nums opacity-80">{money(it.priceCentsSnapshot)} c/u</div>
                             </div>
@@ -530,9 +528,9 @@ export default function ChatPage(){
                               const r = await fetch(`/api/sales/${s.id}/cancel`, {
                                 method: "POST",
                                 headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({ passowrd: adminPw })
+                                body: JSON.stringify({ password: adminPw })
                               })
-                              if(!r.ok){ alert("Contrasen1a inválida o error"); return }
+                              if(!r.ok){ alert("Contraseña inválida o error"); return }
                               await loadPendingSales()
                             }}
                           >

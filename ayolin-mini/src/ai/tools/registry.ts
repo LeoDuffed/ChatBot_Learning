@@ -18,7 +18,7 @@ import {
     cartSetContactTool,
     checkoutSubmitTool
 } from "./checkout";
-import type { ZodTypeAny } from "zod";
+import { ZodError, type ZodTypeAny } from "zod";
 
 // Use `any` to erase generic variance across different tool input schemas
 export const tools: Tool<any, any>[] = [
@@ -61,6 +61,17 @@ export function getOpenAIFunctions(){
 export async function dispatchToolCall(name: string, args: unknown, ctx: any){
     const tool = tools.find((t) => t.name === name)
     if(!tool) throw new Error(`Tool no registrada: ${name}`)
-    const parsed = tool.inputSchema.parse(args)
-    return tool.execute(parsed, ctx)
+    try {
+        const parsed = tool.inputSchema.parse(args)
+        return tool.execute(parsed, ctx)
+    } catch (err) {
+        if(err instanceof ZodError){
+            return {
+                ok: false,
+                error: "Argumentos inválidos para la herramienta",
+                issues: err.issues,
+            }
+        }
+        throw err
+    }
 }
