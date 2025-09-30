@@ -42,9 +42,6 @@ export default function HomePage() {
                 <Button asChild className="bg-white text-black hover:bg-white/90">
                   <Link href="#como-funciona">Cómo funciona</Link>
                 </Button>
-                <Button variant="outline" asChild className="bg-white text-black hover:bg-white/90">
-                  <Link href="#faq">Preguntas frecuentes</Link>
-                </Button>
               </div>
 
               <p className="mt-3 text-xs text-muted-foreground">
