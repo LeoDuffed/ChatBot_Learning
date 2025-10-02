@@ -12,7 +12,7 @@ export default function AgentLayout({ children }: { children: React.ReactNode })
       <div className="shrink-0">
         <Navbar />
       </div>
-      <main className="flex-1 min-h-0 overflow-hidden">
+      <main className="flex flex-1 flex-col min-h-0 overflow-hidden">
         {children}
       </main>
     </div>

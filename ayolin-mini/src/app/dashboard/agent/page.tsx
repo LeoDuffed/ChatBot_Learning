@@ -255,17 +255,17 @@ export default function ChatPage(){
   }
 
   return (
-    <div className="h-full w-full">
-      <div className="grid h-full w-full grid-cols-12">
+    <div className="flex h-full w-full flex-1 overflow-hidden">
+      <div className="grid h-full min-h-0 w-full grid-cols-12">
         {/* Sidebar (scrollable) */}
-        <aside className="col-span-3 h-[100dvh] border-r border-neutral-800 bg-neutral-950/60 backdrop-blur flex flex-col">
+        <aside className="col-span-3 flex h-full min-h-0 flex-col border-r border-neutral-800 bg-neutral-950/60 backdrop-blur">
           {/* Header del aside (fijo) */}
           <div className="p-4 border-b border-neutral-800">
             <Button size="sm" variant="secondary" onClick={newChat} className="w-full">+ Nuevo</Button>
           </div>
 
           {/* Contenido del aside con scroll propio */}
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 min-h-0 overflow-y-auto">
             <div className="p-4 space-y-6">
               {/* Configuracion de Pago y Envio */}
               <section className="space-y-3">
@@ -580,7 +580,7 @@ export default function ChatPage(){
 
 
         {/* Chat (min-h-screen y con su propio scroll en mensajes) */}
-        <section className="col-span-9 flex h-full flex-col overflow-hidden">
+        <section className="col-span-9 flex h-full min-h-0 flex-col overflow-hidden">
           {/* Header fijo */}
           <div className="shrink-0 px-4 py-3 border-b border-neutral-800 text-2xl opacity-80 text-white font-bold bg-neutral-900/80 backdrop-blur">
             {activeChatTitle}
