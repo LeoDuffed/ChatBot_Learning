@@ -5,9 +5,9 @@ import { Button } from '@/components/ui/button'
 import { Metadata } from 'next'
 
 const links = [
-	{ name: 'Custom', href: '/dashboard/configuracion/cuenta' },
-	{ name: 'Inventario', href: '/dashboard/configuracion/pagos' },
-	{ name: 'Ventas', href: '/dashboard/configuracion/pagos' },
+	{ name: 'Custom', href: '/dashboard/config' },
+	{ name: 'Inventario', href: '/dashboard/config' },
+	{ name: 'Ventas', href: '/dashboard/config' },
 ]
 
 export const metadata: Metadata = {

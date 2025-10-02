@@ -10,7 +10,7 @@ export default function Navbar() {
 	const pathname = usePathname()
 
 	const links = [
-		{ label: 'Chat',    href: '/dashboard/agent', icon: MessageSquareText },
+		{ label: 'Chat', href: '/dashboard/agent', icon: MessageSquareText },
 		{ label: 'Config', href: '/dashboard/config', icon: Settings2 },
 	]
 
