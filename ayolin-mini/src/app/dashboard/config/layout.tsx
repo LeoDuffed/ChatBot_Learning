@@ -31,7 +31,7 @@ export default function ConfiguracionLayout({
 						<nav className="px-4 py-4">
 							<ul className="space-y-1">
 								{links.map((link) => (
-									<li key={link.href}>
+									<li key={`${link.href}-${link.name}`}>
 										<Button
 											variant="link"
 											asChild
