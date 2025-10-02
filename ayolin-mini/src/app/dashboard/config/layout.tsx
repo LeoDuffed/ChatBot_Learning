@@ -6,7 +6,7 @@ import { Metadata } from 'next'
 
 const links = [
 	{ name: 'Custom', href: '/dashboard/config' },
-	{ name: 'Inventario', href: '/dashboard/config' },
+	{ name: 'Inventario', href: '/dashboard/config/inventario' },
 	{ name: 'Ventas', href: '/dashboard/config' },
 ]
 
