@@ -256,7 +256,7 @@ export default function ChatPage(){
 
   return (
     <div className="h-full w-full">
-      <div className="grid h-[100dvh] grid-cols-12">
+      <div className="grid h-full w-full grid-cols-12">
         {/* Sidebar (scrollable) */}
         <aside className="col-span-3 h-[100dvh] border-r border-neutral-800 bg-neutral-950/60 backdrop-blur flex flex-col">
           {/* Header del aside (fijo) */}
@@ -580,7 +580,7 @@ export default function ChatPage(){
 
 
         {/* Chat (min-h-screen y con su propio scroll en mensajes) */}
-        <section className="col-span-9 h-[100dvh] flex flex-col overflow-hidden">
+        <section className="col-span-9 flex h-full flex-col overflow-hidden">
           {/* Header fijo */}
           <div className="shrink-0 px-4 py-3 border-b border-neutral-800 text-2xl opacity-80 text-white font-bold bg-neutral-900/80 backdrop-blur">
             {activeChatTitle}
