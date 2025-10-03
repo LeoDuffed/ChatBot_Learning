@@ -174,7 +174,11 @@ export default function HomePage() {
               <p className="text-sm text-muted-foreground">
                 ¿Tienes dudas o quieres integrarlo?
               </p>
-              <h3 className="text-lg font-semibold">Hablemos</h3>
+              <Button variant="outline" className="bg-transparent border-none p-0 shadow-none text-white hover:text-white hover:bg-transparent hover:border-none">
+                <a href="http://localhost:3000/dashboard/agent" target="_self">
+                  Hablemos
+                </a>
+              </Button>
             </div>
             <div className="flex gap-3">
               <Button asChild>

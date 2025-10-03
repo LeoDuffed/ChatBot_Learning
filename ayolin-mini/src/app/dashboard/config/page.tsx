@@ -87,7 +87,7 @@ export default function ChatPage(){
     return (
         <>
         <h1 className="text-2xl text-white pb-10">Metodos de pago y entrega</h1>
-          <div className="grid h-full min-h-0 w-full grid-cols-1 pag-10 md:grid-cols-2">
+          <div className="grid h-full min-h-0 w-full grid-cols-1 gap-10 md:grid-cols-2">
             <section>
                 {/* Metodos de envio */}
                 <div className="space-y-2 border border-neutral-800 rounded-lg p-3 bg-neutral-900/40">
