@@ -57,7 +57,7 @@ export default function Inventario(){
     }
   }
 
-  useEffect(() => { load() }, [url]) // recarga al cambiar q/page
+  useEffect(() => { load() }) // recarga al cambiar q/page
 
   const maxPage = Math.max(1, Math.ceil(total / pageSize))
   const currentPage = Math.min(page, maxPage)
