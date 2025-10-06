@@ -17,13 +17,14 @@ type Product = {
 }
 
 export default function Inventario(){
-  const [prodForm, setProdForm] = useState({ sku:"", name:"", priceCents:"", stock:""})
-  const [items, setItems] = useState<Product[]>([])
-  const [loading, setLoading] = useState(false)
-  const [q] = useState("")
-  const [page, setPage] = useState(1)
-  const pageSize = 6
-  const [total, setTotal] = useState(0)
+    const [prodForm, setProdForm] = useState({ sku:"", name:"", priceCents:"", stock:""})
+    const [items, setItems] = useState<Product[]>([])
+    const [loading, setLoading] = useState(false)
+    const [intentForm, setIntentForm] = useState({ sku:"", qty: "" })
+    const [q] = useState("")
+    const [page, setPage] = useState(1)
+    const pageSize = 6
+    const [total, setTotal] = useState(0)
 
   const money = (cents: number) =>
     (cents/100).toLocaleString("es-MX", { style:"currency", currency:"MXN" })
@@ -57,7 +58,7 @@ export default function Inventario(){
     }
   }
 
-  useEffect(() => { load() }) // recarga al cambiar q/page
+  useEffect(() => { load() }, [url]) // recarga al cambiar q/page
 
   const maxPage = Math.max(1, Math.ceil(total / pageSize))
   const currentPage = Math.min(page, maxPage)
@@ -69,7 +70,7 @@ export default function Inventario(){
       <div className="grid min-h-0 w-full grid-cols-1 gap-6 md:grid-cols-2">
         {/* Izquierda: nuevo producto */}
         <section>
-          <Card className="bg-neutral-900 border-neutral-800">
+          <Card className="bg-neutral-900 border-neutral-800 pt-8">
             <CardHeader>
               <CardTitle className="text-white">Nuevo producto</CardTitle>
             </CardHeader>
@@ -115,6 +116,50 @@ export default function Inventario(){
               </div>
             </CardContent>
           </Card>
+
+            <Card className="bg-neutral-900 border-neutral-800 p-5 mt-5">
+                <div className="space-y-2 pt-1">
+                  <div className="text-sm text-white">Intentar venta</div>
+                  <Input placeholder="SKU" value={intentForm.sku} onChange={(e)=>setIntentForm(p=>({...p, sku:e.target.value}))} className="bg-neutral-800 border-neutral-700 text-white"/>
+                  <Input placeholder="Cantidad" value={intentForm.qty} onChange={(e)=>setIntentForm(p=>({...p, qty:e.target.value}))} className="bg-neutral-800 border-neutral-700 text-white"/>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      onClick={async() => {
+                        const r = await fetch("/api/sales/intent", {
+                          method: "POST",
+                          headers: {"Content-Type":"application/json"},
+                          body: JSON.stringify({sku: intentForm.sku, qty: Number(intentForm.qty||1)}),
+                        })
+                        const data = await r.json()
+                        alert(data.prompt ?? (data.error || "Respuesta sin prompt"))
+                      }}
+                      className="bg-emerald-500 text-black hover:bg-emerald-400"
+                    >
+                      Probar intento
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={async() => {
+                        const r = await fetch("/api/sales/confirm",{
+                          method: "POST",
+                          headers: {"Content-Type":"application/json"},
+                          body: JSON.stringify({
+                            sku: intentForm.sku,
+                            qty: Number(intentForm.qty||1),
+                            paymentMethod: "cash",
+                          }),
+                        })
+                        const data = await r.json()
+                        alert(data.prompt ?? (data.error || "Respuesta sin prompt"))
+                      }}
+                      className="bg-amber-600 text-black hover:bg-amber-500"
+                    >
+                      Confirmar
+                    </Button>
+                  </div>
+                </div>
+            </Card>
         </section>
 
         {/* Derecha: lista inventario */}

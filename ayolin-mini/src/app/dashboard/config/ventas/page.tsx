@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Separator } from "@/components/ui/separator"
 
 type SaleItemDTO = {
   id: string
@@ -117,7 +116,8 @@ export default function Ventas(){
 
       <div className="mt-6 flex-1 min-h-0">
         <div className="grid h-full min-h-0 gap-6 lg:grid-cols-[minmax(0,320px)_minmax(0,1fr)]">
-          <Card className="bg-neutral-900 border-neutral-800">
+          {/* SIDEBAR */}
+          <Card className="bg-neutral-900 border-neutral-800 h-fit">
             <CardHeader>
               <CardTitle className="text-white">Contraseña del jefe</CardTitle>
             </CardHeader>
@@ -143,119 +143,153 @@ export default function Ventas(){
             </CardContent>
           </Card>
 
-          <Card className="bg-neutral-900 border-neutral-800 flex h-full min-h-0 flex-col">
-            <CardHeader className="space-y-3">
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <CardTitle className="text-white">Pendientes por pago</CardTitle>
-                  <p className="text-sm text-neutral-400">Marca las ventas como pagadas o cancélalas.</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  {loading && <span className="text-xs text-neutral-500">Actualizando…</span>}
-                  <Button size="sm" variant="outline" onClick={loadPendingSales} className="border-neutral-700 text-neutral-200">
+          {/* CONTENIDO */}
+          <Card className="bg-neutral-900 border-neutral-800 flex h-full min-h-[600px] md:min-h-[680px] flex-col overflow-hidden">
+            <CardHeader className="flex flex-col gap-4 border-b border-neutral-800 bg-neutral-900/70 px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <CardTitle className="text-white">Pendientes por pago</CardTitle>
+                <p className="text-sm text-neutral-400">Marca las ventas como pagadas o cancélalas.</p>
+              </div>
+              <div className="flex items-center gap-2">
+                {loading && <span className="text-xs text-neutral-500">Actualizando…</span>}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={loadPendingSales}
+                  className="border-neutral-700 text-neutral-200"
+                >
                   Refrescar
                 </Button>
               </div>
-            </div>
-          </CardHeader>
+            </CardHeader>
 
-          <Separator className="bg-neutral-800" />
+            <CardContent className="flex-1 min-h-0 space-y-4 overflow-y-auto px-6 py-6">
+              {error && (
+                <div className="rounded border border-red-500/50 bg-red-500/10 px-3 py-2 text-sm text-red-200">
+                  {error}
+                </div>
+              )}
 
-          <CardContent className="flex-1 h-screen space-y-4 overflow-y-auto pr-1">
-            {error && (
-              <div className="rounded border border-red-500/50 bg-red-500/10 px-3 py-2 text-sm text-red-200">
-                {error}
-              </div>
-            )}
+              {!loading && !error && sales.length === 0 && (
+                <div className="rounded border border-neutral-800 bg-neutral-900/60 px-4 py-6 text-center text-sm text-neutral-400">
+                  No hay ventas pendientes por cobrar.
+                </div>
+              )}
 
-            {!loading && !error && sales.length === 0 && (
-              <div className="rounded border border-neutral-800 bg-neutral-900/60 px-4 py-6 text-center text-sm text-neutral-400">
-                No hay ventas pendientes por cobrar.
-              </div>
-            )}
-
-            {sales.map((s) => (
-              <div key={s.id} className="rounded border border-neutral-800 bg-neutral-900/60 p-4 text-sm space-y-4">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <div className="font-medium text-white">
-                      Venta <span className="opacity-60">#{s.id.slice(-6)}</span>
+              {sales.map((s) => (
+                <article
+                  key={s.id}
+                  className="rounded-lg border border-neutral-800/80 bg-neutral-900/70 p-5 shadow-sm focus-within:ring-1 focus-within:ring-neutral-700/80 outline-none min-h-[320px]"
+                >
+                  {/* Encabezado */}
+                  <div className="flex flex-wrap items-start justify-between gap-4">
+                    <div className="space-y-1">
+                      <h2 className="font-medium text-white leading-tight">
+                        Venta <span className="opacity-60">#{s.id.slice(-6)}</span>
+                      </h2>
+                      <p className="text-xs text-neutral-400">
+                        {new Date(s.createdAt).toLocaleString("es-MX", {
+                          day: "2-digit",
+                          month: "short",
+                          year: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </p>
                     </div>
-                    <div className="text-xs text-neutral-400">
-                      {new Date(s.createdAt).toLocaleString("es-MX", {
-                        day: "2-digit",
-                        month: "short",
-                        year: "numeric",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
+
+                    <Badge
+                      variant="outline"
+                      className="border-emerald-500/40 bg-emerald-500/10 text-emerald-200"
+                    >
+                      {statusLabel[s.status]}
+                    </Badge>
+                  </div>
+
+                  {/* Ticket */}
+                  <div className="mt-4 rounded-md border border-neutral-800/80 bg-neutral-950/60">
+                    <div className="px-4 py-2 text-[11px] uppercase tracking-wide text-neutral-500 border-b border-neutral-800/80 sticky top-0 bg-neutral-950/80 backdrop-blur">
+                      Ticket de compra
+                    </div>
+                    <div className="max-h-72 md:max-h-80 overflow-y-auto divide-y divide-neutral-800/80">
+                      {s.items.map((it) => (
+                        <div
+                          key={it.id}
+                          className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm text-neutral-200"
+                        >
+                          <div className="flex-1 min-w-[200px] break-words">
+                            <div className="line-clamp-2 leading-snug">
+                              {it.qty} × {it.nameSnapshot}
+                            </div>
+                            <div className="text-xs text-neutral-500">{it.sku}</div>
+                          </div>
+                          <div className="tabular-nums text-sm text-neutral-300 shrink-0">
+                            {money.format(it.priceCentsSnapshot / 100)} c/u
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
 
-                  <Badge variant="outline" className="border-emerald-500/40 bg-emerald-500/10 text-emerald-200">
-                    {statusLabel[s.status]}
-                  </Badge>
-                </div>
-
-                <div className="space-y-2">
-                  {s.items.map((it) => (
-                    <div key={it.id} className="flex flex-wrap items-center justify-between gap-2 text-neutral-200">
-                      <div className="truncate">
-                        {it.qty} × {it.nameSnapshot} <span className="opacity-60">({it.sku})</span>
-                      </div>
-                      <div className="tabular-nums opacity-80">
-                        {money.format(it.priceCentsSnapshot / 100)} c/u
-                      </div>
+                  {/* Info extra */}
+                  <dl className="mt-4 grid gap-3 text-sm text-neutral-200 md:grid-cols-2">
+                    <div className="space-y-1">
+                      <dt className="text-xs uppercase tracking-wide text-neutral-500">Pago</dt>
+                      <dd>{s.paymentMethod ? (pmLabel[s.paymentMethod] ?? s.paymentMethod) : "-"}</dd>
                     </div>
-                  ))}
-                </div>
+                    <div className="space-y-1">
+                      <dt className="text-xs uppercase tracking-wide text-neutral-500">Entrega</dt>
+                      <dd>{s.shippingMethod ? (smLabel[s.shippingMethod] ?? s.shippingMethod) : "-"}</dd>
+                      {s.shippingAddress && (
+                        <dd className="text-xs text-neutral-400 whitespace-pre-wrap break-words">
+                          {s.shippingAddress}
+                        </dd>
+                      )}
+                    </div>
+                    <div className="space-y-1">
+                      <dt className="text-xs uppercase tracking-wide text-neutral-500">Cliente</dt>
+                      <dd className="break-words">{s.customerName || "-"}</dd>
+                      {s.customerPhone && (
+                        <dd className="text-xs text-neutral-400 break-words">{s.customerPhone}</dd>
+                      )}
+                    </div>
+                    <div className="space-y-1">
+                      <dt className="text-xs uppercase tracking-wide text-neutral-500">Notas</dt>
+                      <dd className="text-neutral-300 whitespace-pre-wrap break-words max-h-32 overflow-y-auto pr-1">
+                        {s.notes || "-"}
+                      </dd>
+                    </div>
+                  </dl>
 
-                <div className="flex items-center justify-between border-t border-neutral-800 pt-3 text-white">
-                  <span className="text-xs uppercase tracking-wide text-neutral-400">Total</span>
-                  <span className="font-semibold tabular-nums">{money.format(s.totalCents / 100)}</span>
-                </div>
+                  {/* Total */}
+                  <div className="mt-4 flex items-center justify-between rounded-md border border-neutral-800/70 bg-neutral-950/60 px-4 py-3">
+                    <span className="text-xs uppercase tracking-wide text-neutral-500">Total</span>
+                    <span className="font-semibold tabular-nums text-white">
+                      {money.format(s.totalCents / 100)}
+                    </span>
+                  </div>
 
-                <div className="grid gap-3 md:grid-cols-2">
-                  <div className="space-y-1 text-neutral-200">
-                    <div className="text-xs uppercase tracking-wide text-neutral-500">Pago</div>
-                    <div>{s.paymentMethod ? (pmLabel[s.paymentMethod] ?? s.paymentMethod) : "-"}</div>
+                  {/* Acciones */}
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <Button
+                      size="sm"
+                      className="bg-emerald-600 text-black hover:bg-emerald-500"
+                      onClick={() => handleMarkPaid(s.id)}
+                    >
+                      Marcar pagada
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => handleCancel(s.id)}
+                    >
+                      Cancelar
+                    </Button>
                   </div>
-                  <div className="space-y-1 text-neutral-200">
-                    <div className="text-xs uppercase tracking-wide text-neutral-500">Entrega</div>
-                    <div>{s.shippingMethod ? (smLabel[s.shippingMethod] ?? s.shippingMethod) : "-"}</div>
-                    {s.shippingAddress && <div className="text-xs text-neutral-400">{s.shippingAddress}</div>}
-                  </div>
-                  <div className="space-y-1 text-neutral-200">
-                    <div className="text-xs uppercase tracking-wide text-neutral-500">Cliente</div>
-                    <div>{s.customerName || "-"}</div>
-                    {s.customerPhone && <div className="text-xs text-neutral-400">{s.customerPhone}</div>}
-                  </div>
-                  <div className="space-y-1 text-neutral-200">
-                    <div className="text-xs uppercase tracking-wide text-neutral-500">Notas</div>
-                    <div>{s.notes || "-"}</div>
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap gap-2 pt-1">
-                  <Button
-                    size="sm"
-                    className="bg-emerald-600 text-black hover:bg-emerald-500"
-                    onClick={() => handleMarkPaid(s.id)}
-                  >
-                    Marcar pagada
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="destructive"
-                    onClick={() => handleCancel(s.id)}
-                  >
-                    Cancelar
-                  </Button>
-                </div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
+                </article>
+              ))}
+            </CardContent>
+          </Card>
         </div>
       </div>
     </div>

@@ -1,7 +1,6 @@
 'use client'
 
 import {
-  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -28,28 +27,6 @@ type BotSettings = {
   } | null
 }
 
-type SaleItemDTO = {
-  id: string
-  sku: string
-  nameSnapshot: string
-  priceCentsSnapshot: number
-  qty: number
-}
-
-type SaleDTO = {
-  id: string
-  status: "pending_payment" | "paid" | "cancelled"
-  totalCents: number
-  paymentMethod?: string | null
-  shippingMethod?: string | null
-  shippingAddress?: string | null
-  customerName?: string | null
-  customerPhone?: string | null
-  notes?: string | null
-  createdAt: string
-  items: SaleItemDTO[]
-}
-
 export default function ChatPage(){
   const [chats, setChats] = useState<Chat[]>([])
   const [activeChatId, setActiveChatId] = useState<string|null>(null)
@@ -57,15 +34,8 @@ export default function ChatPage(){
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const endRef = useRef<HTMLDivElement>(null)
-  const [sales, setSales] = useState<SaleDTO[]>([])
-  const [adminPw, setAdminPw] = useState("")
-  const [prodForm, setProdForm] = useState({ sku:"", name:"", priceCents:"", stock:""})
   const [intentForm, setIntentForm] = useState({ sku:"", qty: "" })
   const [, setBotSettings] = useState<BotSettings | null>(null)
-
-  const money = (cents: number) => `$${(cents / 100).toFixed(2)}`
-  const pmLabel: Record<string, string> = { cash: "Efectivo", transfer: "Transferencia", card: "Tarjeta" }
-  const smLabel: Record<string, string> = {  domicilio: "Envío a domicilio", punto_medio: "Punto medio", recoleccion: "Recolección" }
 
   // Auto scroll 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth'}) }, [messages])
@@ -190,20 +160,12 @@ export default function ChatPage(){
     // Recargar mensajes de la DB
     await loadMessages(chatId!)
     await loadChats()
-    await loadPendingSales()
   }
 
   const activeChatTitle = useMemo(
     () => chats.find(c => c.id === activeChatId)?.title ?? 'Nuevo chat',
     [chats, activeChatId]
   )
-
-  const loadPendingSales = useCallback(async () => {
-    const r = await fetch("/api/sales/admin?status=pending_payment")
-    if(!r.ok) return
-    const data = await r.json()
-    setSales(data.items ?? [])
-  }, [])
 
   return (
     <div className="flex h-full w-full flex-1 overflow-hidden">
@@ -219,62 +181,8 @@ export default function ChatPage(){
           <div className="flex-1 min-h-0 overflow-y-auto">
             <div className="p-4 space-y-6">
               
-              {/* Ventas Panel */}
               <section className="space-y-3">
                 <h3 className="text-sm font-semibold text-white/80">Ventas Panel</h3>
-
-                <div className="space-y-2">
-                  <div className="text-xs opacity-70">Contraseña del jefe</div>
-                  <Input 
-                    type="password" 
-                    value={adminPw} 
-                    onChange={(e) => setAdminPw(e.target.value)} 
-                    placeholder="Mínimo 4 caracteres" 
-                    className="bg-neutral-800 border-neutral-700 text-white"
-                  />
-                  <Button
-                    size="sm"
-                    onClick={async() => {
-                      const r = await fetch("/api/my-bot/settings/sales-password",{
-                        method: "PUT",
-                        headers: {"Content-Type":"application/json"},
-                        body: JSON.stringify({password: adminPw})
-                      })
-                      alert(r.ok ? "Contraseña guardada" : "Error al guardar la contraseña")
-                    }}
-                    className="bg-white text-black hover:bg-white/90"
-                  >
-                    Guardar Contraseña
-                  </Button>
-                </div>
-
-                <div className="space-y-2 pt-1">
-                  <div className="text-xs opacity-70">Nuevo producto</div>
-                  <Input placeholder="SKU" value={prodForm.sku} onChange={(e) => setProdForm(p => ({ ...p, sku:e.target.value}))} className="bg-neutral-800 border-neutral-700 text-white" />
-                  <Input placeholder="Nombre" value={prodForm.name} onChange={(e) => setProdForm(p => ({ ...p, name:e.target.value}))} className="bg-neutral-800 border-neutral-700 text-white" />
-                  <Input placeholder="Precio (centavos)" value={prodForm.priceCents} onChange={(e) => setProdForm(p => ({ ...p, priceCents:e.target.value}))} className="bg-neutral-800 border-neutral-700 text-white" />
-                  <Input placeholder="Stock" value={prodForm.stock} onChange={(e) => setProdForm(p => ({ ...p, stock:e.target.value}))} className="bg-neutral-800 border-neutral-700 text-white" />
-                  <Button 
-                    size="sm"
-                    onClick={async() => {
-                      const r = await fetch("/api/products", {
-                        method: "POST",
-                        headers: {"Content-Type":"application/json"},
-                        body: JSON.stringify({
-                          sku: prodForm.sku,
-                          name: prodForm.name,
-                          priceCents: Number(prodForm.priceCents||0),
-                          stock: Number(prodForm.stock||0),
-                        }),
-                      })
-                      alert(r.ok ? "Producto guardado" : "Error guardando producto")
-                      if(r.ok) setProdForm({ sku: "", name:"", priceCents:"", stock:""})
-                    }}
-                    className="bg-blue-500 text-black hover:bg-blue-400"
-                  >
-                    Guardar Producto
-                  </Button>
-                </div>
 
                 <div className="space-y-2 pt-1">
                   <div className="text-sm opacity-70">Intentar venta</div>
@@ -311,7 +219,6 @@ export default function ChatPage(){
                         })
                         const data = await r.json()
                         alert(data.prompt ?? (data.error || "Respuesta sin prompt"))
-                        await loadPendingSales()
                       }}
                       className="bg-amber-600 text-black hover:bg-amber-500"
                     >
@@ -320,104 +227,6 @@ export default function ChatPage(){
                   </div>
                 </div>
 
-                {/* Pendientes por pago */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="text-xs opacity-70">Pendientes por pago</div>
-                    <Button size="sm" variant="secondary" onClick={loadPendingSales}>Refrescar</Button>
-                  </div>
-
-                  <div className="space-y-2 max-h-64 overflow-auto pr-1">
-                    {sales.length === 0 && <div className="text-xs text-white/60">Sin Pendientes</div>}
-                    {sales.map((s) => (
-                      <div key={s.id} className="border border-neutral-800 rounded p-2 text-sm space-y-2 bg-neutral-900/50">
-                        <div className="flex items-start justify-between pag-2">
-                          <div className="font-medium">
-                            Venta <span className="opacity-60">#{s.id.slice(-6)}</span>
-                          </div>
-                          <div className="opcatity-60">{new Date(s.createdAt).toLocaleDateString()}</div>
-                        </div>
-
-                        {/* Items */}
-                        <div className="space-y-1">
-                          {s.items.map((it) => (
-                            <div key={it.id} className="flex items-center justify-between">
-                              <div className="truncate">
-                                {it.qty} x {it.nameSnapshot} <span className="opacity-60">({it.sku})</span>
-                              </div>
-                              <div className="tabular-nums opacity-80">{money(it.priceCentsSnapshot)} c/u</div>
-                            </div>
-                          ))}
-                        </div>
-
-                        <div className="flex items-center justify-between pt-1">
-                          <div className="text-xs opacity-70">Total</div>
-                          <div className="font-semibold tabular-nums">{money(s.totalCents)}</div>
-                        </div>
-
-                        {/* Datos del checkoput */}
-                        <div className="grid grid-cols-2 gap-2 text-sm">
-                          <div className="opacity-80">
-                            <div className="opacity-60">Pago</div>
-                            <div className="font-medium">{s.paymentMethod ? (pmLabel[s.paymentMethod] ?? s.paymentMethod) : "-"}</div>
-                          </div>
-                          <div className="opacity-80">
-                            <div className="opacity-60">Entrega</div>
-                            <div className="font-medium">
-                              {s.shippingMethod ? (smLabel[s.shippingMethod] ?? s.shippingMethod) : "-"}
-                            </div>
-                            {s.shippingAddress && <div className="opacity-70">{s.shippingAddress}</div>}
-                          </div>
-                          <div className="opacity-80">
-                            <div className="opacity-60">Cliente</div>
-                            <div className="font-medium">{s.customerName || "-"}</div>
-                            {s.customerPhone && <div className="opacity-70">{s.customerPhone}</div>}
-                          </div>
-                          <div className="opacity-80">
-                            <div className="opacity-60">Estado</div>
-                            <div className="font-medium">{s.status}</div>
-                          </div>
-                        </div>
-
-                        {/* Acciones */}
-                        <div className="flex gap-2 pt-1">
-                          <Button
-                            size="sm"
-                            className="bg-emerald-600 text-black hover:bg-emerald-500"
-                            onClick={async () => {
-                              const r = await fetch(`/api/sales/${s.id}/mark-paid`, {
-                                method: "POST",
-                                headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({ password: adminPw }),
-                              })
-                              if(!r.ok) { alert("Contraseña inválida o error"); return }
-                              await loadPendingSales()
-                            }}
-                          >
-                            Marcar Pagada
-                          </Button>
-
-                          <Button 
-                            size="sm"
-                            variant="destructive"
-                            onClick={async () => {
-                              const r = await fetch(`/api/sales/${s.id}/cancel`, {
-                                method: "POST",
-                                headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({ password: adminPw })
-                              })
-                              if(!r.ok){ alert("Contraseña inválida o error"); return }
-                              await loadPendingSales()
-                            }}
-                          >
-                            Cancelar
-                          </Button>
-                        </div>
-
-                      </div>
-                    ))}
-                  </div>
-                </div>
               </section>
 
               {/* Lista de chats */}
