@@ -1,7 +1,3 @@
-import { z } from "zod"
-import type { Tool } from "@/ai/tools/types"
-import type { ToolContext } from "@/ai/tools/types"
-import { searchProductsText } from "@/lib/textSearch"
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 
