@@ -6,10 +6,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 
 export const POST = async (req: NextRequest) =>{
-    const { input, config } = await req.json() as {input: {query: string, limit: number}, config: Record<string, unknown>}
+    const { input, config } = await req.json() as {input: {query: string, limit: number}, config: {chatbotId: string}}
     const q = input.query.trim()
     const items = await db.product.findMany({
         where: {
+            chatbotId: config.chatbotId,
             OR: [
                 { name: { contains: q, mode: "insensitive" } },
                 { sku: { contains: q.toUpperCase() } },
