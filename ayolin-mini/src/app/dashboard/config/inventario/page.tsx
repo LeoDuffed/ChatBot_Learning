@@ -31,16 +31,17 @@ export default function Inventario(){
 
   // construir URL con search/paginación
   const url = useMemo(() => {
-    const u = new URL("/api/products", window.location.origin)
+    const params = new URLSearchParams()
     if(q.trim().length >= 2) {
-      u.searchParams.set("q", q.trim())
-      u.searchParams.set("pageSize", String(pageSize))
+      params.set("q", q.trim())
+      params.set("pageSize", String(pageSize))
       // cuando hay q, tu API ignora paginación (devuelve top-N)
     } else {
-      u.searchParams.set("page", String(page))
-      u.searchParams.set("pageSize", String(pageSize))
+      params.set("page", String(page))
+      params.set("pageSize", String(pageSize))
     }
-    return u.toString()
+    const search = params.toString()
+    return search ? `/api/products?${search}` : "/api/products"
   }, [q, page, pageSize])
 
   const load = async () => {
