@@ -156,7 +156,7 @@ export default function Ventas(){
                   size="sm"
                   variant="outline"
                   onClick={loadPendingSales}
-                  className="border-neutral-700 text-neutral-200"
+                  className="border-neutral-700 text-black bg-white hover:bg-white/90"
                 >
                   Refrescar
                 </Button>

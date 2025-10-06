@@ -23,7 +23,7 @@ export default function Inventario(){
     const [intentForm, setIntentForm] = useState({ sku:"", qty: "" })
     const [q] = useState("")
     const [page, setPage] = useState(1)
-    const pageSize = 6
+    const pageSize = 5
     const [total, setTotal] = useState(0)
 
   const money = (cents: number) =>
@@ -164,7 +164,7 @@ export default function Inventario(){
 
         {/* Derecha: lista inventario */}
         <section className="min-h-0">
-          <Card className="bg-neutral-900 border-neutral-800 h-full flex flex-col">
+          <Card className="bg-neutral-900 border-neutral-800 flex flex-col">
             <CardHeader className="space-y-3">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-white">Inventario</CardTitle>
