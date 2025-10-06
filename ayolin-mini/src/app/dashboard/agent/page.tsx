@@ -34,7 +34,6 @@ export default function ChatPage(){
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const endRef = useRef<HTMLDivElement>(null)
-  const [intentForm, setIntentForm] = useState({ sku:"", qty: "" })
   const [, setBotSettings] = useState<BotSettings | null>(null)
 
   // Auto scroll 
@@ -180,54 +179,6 @@ export default function ChatPage(){
           {/* Contenido del aside con scroll propio */}
           <div className="flex-1 min-h-0 overflow-y-auto">
             <div className="p-4 space-y-6">
-              
-              <section className="space-y-3">
-                <h3 className="text-sm font-semibold text-white/80">Ventas Panel</h3>
-
-                <div className="space-y-2 pt-1">
-                  <div className="text-sm opacity-70">Intentar venta</div>
-                  <Input placeholder="SKU" value={intentForm.sku} onChange={(e)=>setIntentForm(p=>({...p, sku:e.target.value}))} className="bg-neutral-800 border-neutral-700 text-white"/>
-                  <Input placeholder="Cantidad" value={intentForm.qty} onChange={(e)=>setIntentForm(p=>({...p, qty:e.target.value}))} className="bg-neutral-800 border-neutral-700 text-white"/>
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      onClick={async() => {
-                        const r = await fetch("/api/sales/intent", {
-                          method: "POST",
-                          headers: {"Content-Type":"application/json"},
-                          body: JSON.stringify({sku: intentForm.sku, qty: Number(intentForm.qty||1)}),
-                        })
-                        const data = await r.json()
-                        alert(data.prompt ?? (data.error || "Respuesta sin prompt"))
-                      }}
-                      className="bg-emerald-500 text-black hover:bg-emerald-400"
-                    >
-                      Probar intento
-                    </Button>
-                    <Button
-                      size="sm"
-                      onClick={async() => {
-                        const r = await fetch("/api/sales/confirm",{
-                          method: "POST",
-                          headers: {"Content-Type":"application/json"},
-                          body: JSON.stringify({
-                            sku: intentForm.sku,
-                            qty: Number(intentForm.qty||1),
-                            paymentMethod: "cash",
-                            chatId: activeChatId,
-                          }),
-                        })
-                        const data = await r.json()
-                        alert(data.prompt ?? (data.error || "Respuesta sin prompt"))
-                      }}
-                      className="bg-amber-600 text-black hover:bg-amber-500"
-                    >
-                      Confirmar
-                    </Button>
-                  </div>
-                </div>
-
-              </section>
 
               {/* Lista de chats */}
               <section className="space-y-3">
